@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "id": "aimen.mediajournal",
+  "name": "Media Journal",
+  "version": "0.1.0",
+  "author": "aimen",
+  "description": "Logs films/books/games/comics/music with ratings + reviews as markdown notes in an Obsidian vault",
+  "kinds": ["service", "menu", "bar-widget"],
+  "keepLoaded": true,
+  "entryPoints": {
+    "service": "Service.qml",
+    "menu": "MediaMenu.qml",
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Media Journal",
+    "description": "Toggles the media journal menu",
+    "category": "Productivity",
+    "defaultSection": "right",
+    "allowMultiple": false
+  }
+}
