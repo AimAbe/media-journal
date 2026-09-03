@@ -123,10 +123,15 @@ responses already carry what a log entry needs.)
       dashboard actually renders.
 
 ## Phase 7 — Polish & Share
-- [ ] Handle API failures / no results gracefully.
-- [ ] `omarchy plugin validate` clean.
-- [ ] Public git repo.
-- [ ] List at omarchyplugins.com.
+- [x] Handle API failures / no results gracefully. → 36 distinct error
+      paths across config/search/save (missing key, no results, network
+      failure, bad JSON, no vault, mkdir/write failure, busy-guards).
+- [x] `omarchy plugin validate` clean.
+- [x] Public git repo. → git-initialized, first commit made, README +
+      LICENSE (MIT) written. **Not yet pushed anywhere** — no GitHub remote
+      exists yet, that's the one open step.
+- [ ] List at omarchyplugins.com. → needs the GitHub remote above first;
+      haven't looked at their submission process yet.
 
 ---
 
