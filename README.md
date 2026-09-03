@@ -18,6 +18,17 @@ publisher, ...) — you just add your rating, review, and status.
 | Music  | [MusicBrainz](https://musicbrainz.org/doc/MusicBrainz_API)         | no      |
 | Comic  | [Comic Vine](https://comicvine.gamespot.com/api/)                  | yes     |
 
+## Requirements
+
+- Omarchy / `omarchy-shell` (Quickshell) — this is a shell plugin, not a
+  standalone app.
+- `curl` — every search shells out to it directly; almost certainly already
+  on your system.
+- [Obsidian](https://obsidian.md) with the
+  [Dataview](https://blacksmithgu.github.io/obsidian-dataview/) community
+  plugin, only if you want the dashboard (`Media Journal.md`) to render —
+  logging entries works without it.
+
 ## Install
 
 ```bash
@@ -37,6 +48,18 @@ open the menu, or bind a key:
 # ~/.config/hypr/bindings.conf
 bindd = SUPER, M, Log media, exec, omarchy-shell shell toggle aimen.mediajournal '{}'
 ```
+
+## Uninstall
+
+```bash
+omarchy plugin remove aimen.mediajournal --yes
+```
+
+This removes the plugin's entry from `~/.config/omarchy/shell.json` and
+deletes `~/.config/omarchy/plugins/aimen.mediajournal/`. It doesn't touch
+anything it already wrote — your vault's `Media/` notes and
+`~/.local/state/omarchy/settings/media-journal.json` (your API keys) are
+left alone; delete those yourself if you want them gone too.
 
 ## Configure
 
