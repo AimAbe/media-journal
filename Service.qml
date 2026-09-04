@@ -10,7 +10,7 @@ import "lib/ComicVine.js" as ComicVine
 
 // Media Journal service. Owns config, per-media search + markdown writing.
 // A menu/bar-widget in the same shell process talks to this directly via
-// serviceFor("aimen.mediajournal") and binds to its reactive properties;
+// serviceFor("aimabe.mediajournal") and binds to its reactive properties;
 // the IpcHandler below exists for external callers (keybindings, testing)
 // and mirrors the same operations behind typed string args.
 //

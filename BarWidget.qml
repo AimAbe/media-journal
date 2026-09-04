@@ -23,7 +23,7 @@ import qs.Ui
 // shell-out pattern one layer up).
 BarWidget {
   id: root
-  moduleName: "aimen.mediajournal"
+  moduleName: "aimabe.mediajournal"
 
   implicitWidth: button.implicitWidth
   implicitHeight: button.implicitHeight
@@ -40,7 +40,7 @@ BarWidget {
     tooltipText: "Media Journal"
     onPressed: function(mouseButton) {
       if (!root.bar) return
-      root.bar.run("omarchy-shell shell toggle aimen.mediajournal '{}'")
+      root.bar.run("omarchy-shell shell toggle aimabe.mediajournal '{}'")
     }
   }
 }

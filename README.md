@@ -35,28 +35,28 @@ publisher, ...) — you just add your rating, review, and status.
 omarchy plugin add https://github.com/AimAbe/media-journal.git --enable --yes
 ```
 
-Or clone by hand into `~/.config/omarchy/plugins/aimen.mediajournal/`
+Or clone by hand into `~/.config/omarchy/plugins/aimabe.mediajournal/`
 and run `omarchy-shell shell rescanPlugins`. See the
 [plugin docs](https://github.com/basecamp/omarchy/blob/master/shell/README.md)
 for the general install/enable flow.
 
 A boxed-pencil icon appears in the bar (default: right section — move it with
-`omarchy bar move aimen.mediajournal --section center`). Click it to
+`omarchy bar move aimabe.mediajournal --section center`). Click it to
 open the menu, or bind a key:
 
 ```
 # ~/.config/hypr/bindings.conf
-bindd = SUPER, M, Log media, exec, omarchy-shell shell toggle aimen.mediajournal '{}'
+bindd = SUPER, M, Log media, exec, omarchy-shell shell toggle aimabe.mediajournal '{}'
 ```
 
 ## Uninstall
 
 ```bash
-omarchy plugin remove aimen.mediajournal --yes
+omarchy plugin remove aimabe.mediajournal --yes
 ```
 
 This removes the plugin's entry from `~/.config/omarchy/shell.json` and
-deletes `~/.config/omarchy/plugins/aimen.mediajournal/`. It doesn't touch
+deletes `~/.config/omarchy/plugins/aimabe.mediajournal/`. It doesn't touch
 anything it already wrote — your vault's `Media/` notes and
 `~/.local/state/omarchy/settings/media-journal.json` (your API keys) are
 left alone; delete those yourself if you want them gone too.

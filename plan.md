@@ -32,7 +32,7 @@ RAWG, unified into one personal media diary.
 - [x] Add entryPoints: service / menu / bar-widget QML files.
 - [x] `omarchy plugin validate ./` until it passes.
 - [x] `omarchy plugin add` (or symlink) + enable; confirm it loads.
-      → symlinked `~/.config/omarchy/plugins/aimen.mediajournal` to this repo.
+      → symlinked `~/.config/omarchy/plugins/aimabe.mediajournal` to this repo.
       **Gotcha:** a symlinked plugin dir breaks the shell's inotify-based
       auto-reload (it doesn't traverse symlinks) — `omarchy-shell shell
       rescanPlugins` after every edit, `omarchy-restart-shell` after editing
@@ -145,7 +145,7 @@ responses already carry what a log entry needs.)
    `MediaMenu.qml` on `omarchy.emojis`' PanelWindow/scrim/card shell, built
    from `qs.Ui`'s real form controls instead of hand-rolled key catching.
 3. The bar-widget doesn't call the service directly — it shells out to
-   `omarchy-shell shell toggle aimen.mediajournal '{}'` via `bar.run(...)`,
+   `omarchy-shell shell toggle aimabe.mediajournal '{}'` via `bar.run(...)`,
    matching every first-party bar-widget's own convention (e.g.
    `omarchy.menu`'s `BarWidget.qml`) rather than reaching into
    `bar.shell.toggle(...)` in-process.

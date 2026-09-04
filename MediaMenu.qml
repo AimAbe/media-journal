@@ -45,7 +45,7 @@ Item {
   function dismiss() {
     root.opened = false
     if (root.shell && typeof root.shell.hide === "function")
-      root.shell.hide("aimen.mediajournal")
+      root.shell.hide("aimabe.mediajournal")
   }
 
   // ------------------------------------------------------------ media type
@@ -270,7 +270,7 @@ Item {
     visible: root.opened
     anchors { top: true; bottom: true; left: true; right: true }
     color: "transparent"
-    WlrLayershell.namespace: "aimen-mediajournal"
+    WlrLayershell.namespace: "aimabe-mediajournal"
     WlrLayershell.layer: WlrLayer.Overlay
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive
     exclusionMode: ExclusionMode.Ignore
