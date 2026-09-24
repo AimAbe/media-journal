@@ -8,7 +8,7 @@ load from the web, so they need a connection to show.
 ## This month
 
 ```dataview
-TABLE choice(cover, "![|60](" + cover + ")", "") AS "Cover", type, creator, rating, date_logged AS "Logged"
+TABLE WITHOUT ID choice(cover, "![|60](" + cover + ")", "") AS "Cover", link(file.path, default(title, file.name)) AS "Title", type, creator, rating, date_logged AS "Logged"
 FROM "Media"
 WHERE dateformat(date_logged, "yyyy-MM") = dateformat(date(today), "yyyy-MM")
 SORT date_logged DESC
@@ -17,7 +17,7 @@ SORT date_logged DESC
 ## Best of the year
 
 ```dataview
-TABLE choice(cover, "![|60](" + cover + ")", "") AS "Cover", title, type, creator, year AS "Released", rating
+TABLE WITHOUT ID choice(cover, "![|60](" + cover + ")", "") AS "Cover", link(file.path, default(title, file.name)) AS "Title", type, creator, year AS "Released", rating
 FROM "Media"
 WHERE date_logged.year = date(today).year AND rating >= 4.5
 SORT rating DESC
@@ -26,7 +26,7 @@ SORT rating DESC
 ## In progress
 
 ```dataview
-TABLE choice(cover, "![|60](" + cover + ")", "") AS "Cover", type, creator, status, date_logged AS "Started"
+TABLE WITHOUT ID choice(cover, "![|60](" + cover + ")", "") AS "Cover", link(file.path, default(title, file.name)) AS "Title", type, creator, status, date_logged AS "Started"
 FROM "Media"
 WHERE status = "playing" OR status = "reading" OR status = "watching" OR status = "rewatching"
 SORT date_logged DESC
@@ -37,7 +37,7 @@ SORT date_logged DESC
 ### 🎮 Games
 
 ```dataview
-TABLE choice(cover, "![|60](" + cover + ")", "") AS "Cover", creator AS "Developer", platform, hours_played AS "Hours", rating, status, date_logged AS "Logged"
+TABLE WITHOUT ID choice(cover, "![|60](" + cover + ")", "") AS "Cover", link(file.path, default(title, file.name)) AS "Title", creator AS "Developer", platform, hours_played AS "Hours", rating, status, date_logged AS "Logged"
 FROM "Media/Games"
 SORT date_logged DESC
 ```
@@ -45,7 +45,7 @@ SORT date_logged DESC
 ### 🎬 Films
 
 ```dataview
-TABLE choice(cover, "![|60](" + cover + ")", "") AS "Cover", creator AS "Director", year, runtime, rewatch, rating, date_logged AS "Logged"
+TABLE WITHOUT ID choice(cover, "![|60](" + cover + ")", "") AS "Cover", link(file.path, default(title, file.name)) AS "Title", creator AS "Director", year, runtime, rewatch, rating, date_logged AS "Logged"
 FROM "Media/Films"
 SORT date_logged DESC
 ```
@@ -53,7 +53,7 @@ SORT date_logged DESC
 ### 📺 TV
 
 ```dataview
-TABLE choice(cover, "![|60](" + cover + ")", "") AS "Cover", creator AS "Creator", network, season, seasons AS "Seasons", rating, status, date_logged AS "Logged"
+TABLE WITHOUT ID choice(cover, "![|60](" + cover + ")", "") AS "Cover", link(file.path, default(title, file.name)) AS "Title", creator AS "Creator", network, season, seasons AS "Seasons", rating, status, date_logged AS "Logged"
 FROM "Media/TV"
 SORT date_logged DESC
 ```
@@ -61,7 +61,7 @@ SORT date_logged DESC
 ### 📚 Books
 
 ```dataview
-TABLE choice(cover, "![|60](" + cover + ")", "") AS "Cover", creator AS "Author", pages, format, rating, status, date_logged AS "Logged"
+TABLE WITHOUT ID choice(cover, "![|60](" + cover + ")", "") AS "Cover", link(file.path, default(title, file.name)) AS "Title", creator AS "Author", pages, format, rating, status, date_logged AS "Logged"
 FROM "Media/Books"
 SORT date_logged DESC
 ```
@@ -69,7 +69,7 @@ SORT date_logged DESC
 ### 🎵 Music
 
 ```dataview
-TABLE choice(cover, "![|60](" + cover + ")", "") AS "Cover", creator AS "Artist", format, label, rating, date_logged AS "Logged"
+TABLE WITHOUT ID choice(cover, "![|60](" + cover + ")", "") AS "Cover", link(file.path, default(title, file.name)) AS "Title", creator AS "Artist", format, label, rating, date_logged AS "Logged"
 FROM "Media/Music"
 SORT date_logged DESC
 ```
@@ -77,7 +77,7 @@ SORT date_logged DESC
 ### 💬 Comics
 
 ```dataview
-TABLE choice(cover, "![|60](" + cover + ")", "") AS "Cover", writer, artist, publisher, issues, rating, status, date_logged AS "Logged"
+TABLE WITHOUT ID choice(cover, "![|60](" + cover + ")", "") AS "Cover", link(file.path, default(title, file.name)) AS "Title", writer, artist, publisher, issues, rating, status, date_logged AS "Logged"
 FROM "Media/Comics"
 SORT date_logged DESC
 ```
