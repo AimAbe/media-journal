@@ -187,7 +187,9 @@ Item {
 
   function rowCover(item) {
     if (!item) return ""
-    return root.showingRecent ? String((item.fields && item.fields.cover) || "") : String(item.coverUrl || "")
+    if (!root.showingRecent) return String(item.coverUrl || "")
+    var found = root.lookedUp(item)
+    return String((item.fields && item.fields.cover) || (found ? found.coverUrl : ""))
   }
 
   function activateRow(item) {
@@ -208,6 +210,13 @@ Item {
     root.hasActiveSelection = true
     root.savedConfirmation = ""
     root.prefillFromEntry(entry)
+    if (root.service) root.service.lookupCover(entry)
+  }
+
+  // A note without a cover borrows the one the service looked up for it.
+  function lookedUp(entry) {
+    var l = root.service ? root.service.coverLookup : null
+    return l && entry && l.path === entry.path ? l : null
   }
 
   function prefillFromEntry(entry) {
@@ -228,7 +237,8 @@ Item {
   function headerInfo() {
     if (root.editingEntry) {
       var f = root.editingEntry.fields || {}
-      return { title: root.editingEntry.title, year: f.year || "", creator: f.creator || "", cover: f.cover || "" }
+      var found = root.lookedUp(root.editingEntry)
+      return { title: root.editingEntry.title, year: f.year || "", creator: f.creator || "", cover: f.cover || (found ? found.coverUrl : "") }
     }
     var s = root.selected()
     if (!s) return { title: "", year: "", creator: "", cover: "" }
@@ -355,12 +365,14 @@ Item {
     var fields = root.buildFields()
     // async; onSaveCountChanged below confirms it
     if (root.editingEntry) {
-      // Opened from a search result: fill in the cover and source_id that
-      // notes written before those fields existed are missing.
+      // Fill in the cover and source_id that notes written before those
+      // fields existed are missing: from the search result this entry was
+      // opened under, or else from the service's title lookup.
       var f = root.editingEntry.fields || {}
       var hit = root.editReturnsToForm ? root.selected() : null
-      if (hit && !f.cover && hit.coverUrl) fields.cover = hit.coverUrl
-      if (hit && !f.source_id) fields.sourceId = root.service.sourceIdFor(root.mediaType, hit)
+      var found = root.lookedUp(root.editingEntry)
+      if (!f.cover) fields.cover = (hit && hit.coverUrl) || (found && found.coverUrl) || ""
+      if (!f.source_id) fields.sourceId = (hit && root.service.sourceIdFor(root.mediaType, hit)) || (found && found.sourceId) || ""
       root.service.updateEntry(root.editingEntry.path, fields)
     }
     else root.saveSelected(fields)

@@ -956,6 +956,92 @@ Item {
     }
   }
 
+  // ---------------------------------------------------------- cover lookup
+  //
+  // Notes written before `cover` existed have nothing to show when opened
+  // from the recent list. Opening one looks its title up in the catalog and
+  // only takes an exact title match (same year, and same author/artist for
+  // books and music, when the note has them), so a lookalike never lends
+  // its art. The menu shows it right away and saves it on the next edit.
+  property var coverLookup: null   // {path, coverUrl, sourceId}
+  property var _coverLookupEntry: null
+  property var _coverLookupPending: null
+
+  function _catalogSearchUrl(type, title) {
+    if (type === "game") return root.rawgApiKey ? Rawg.searchUrl(root.rawgApiKey, title, 10) : ""
+    if (type === "film") return root.tmdbApiKey ? Tmdb.searchUrl(root.tmdbApiKey, title) : ""
+    if (type === "book") return OpenLibrary.searchUrl(title, 10)
+    if (type === "music") return MusicBrainz.searchUrl(title, 10)
+    if (type === "comic") return root.comicVineApiKey ? ComicVine.searchUrl(root.comicVineApiKey, title, 10) : ""
+    return ""
+  }
+
+  function _parseCatalogResults(type, raw) {
+    if (type === "game") return Rawg.parseSearchResults(raw)
+    if (type === "film") return Tmdb.parseSearchResults(raw)
+    if (type === "book") return OpenLibrary.parseSearchResults(raw)
+    if (type === "music") return MusicBrainz.parseSearchResults(raw)
+    if (type === "comic") return ComicVine.parseSearchResults(raw)
+    return []
+  }
+
+  function lookupCover(entry) {
+    var f = entry && entry.fields
+    if (!f || f.cover) return false
+    if (root.coverLookup && root.coverLookup.path === entry.path) return true
+    if (coverLookupProc.running) {   // coverLookupProc is a single shared Process
+      root._coverLookupPending = entry
+      return true
+    }
+    var url = root._catalogSearchUrl(String(f.type || ""), String(f.title || entry.title || ""))
+    if (!url || !(f.title || entry.title)) return false
+    root._coverLookupEntry = entry
+    coverLookupProc.command = [
+      "curl", "-fsS", "--max-time", "8",
+      "-H", "User-Agent: " + root._userAgent(),
+      url
+    ]
+    coverLookupProc.running = true
+    return true
+  }
+
+  function _sameName(a, b) {
+    return Frontmatter.slugify(a) === Frontmatter.slugify(b)
+  }
+
+  Process {
+    id: coverLookupProc
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        var entry = root._coverLookupEntry
+        root._coverLookupEntry = null
+        if (entry) {
+          var f = entry.fields
+          var type = String(f.type || "")
+          var hits = []
+          try { hits = root._parseCatalogResults(type, String(text || "")) } catch (e) { hits = [] }
+          var year = Number(f.year) || 0
+          var person = String(f.author || f.artist || "")
+          for (var i = 0; i < hits.length; i++) {
+            var hit = hits[i]
+            if (!hit.coverUrl || !root._sameName(hit.title, f.title || entry.title)) continue
+            if (year && hit.year && hit.year !== year) continue
+            var hitPerson = String((type === "book" ? hit.author : type === "music" ? hit.artist : "") || "")
+            if (person && hitPerson && !root._sameName(person, hitPerson)) continue
+            root.coverLookup = { path: entry.path, coverUrl: hit.coverUrl, sourceId: root.sourceIdFor(type, hit) }
+            break
+          }
+        }
+        if (root._coverLookupPending) {
+          var next = root._coverLookupPending
+          root._coverLookupPending = null
+          root.lookupCover(next)
+        }
+      }
+    }
+  }
+
   // ------------------------------------------------------------------- IPC
   //
   // Fire-and-forget: these kick work off and return immediately, same as
@@ -979,6 +1065,7 @@ Item {
       filmResultCount: root.filmResults.length,
       filmDetailsBusy: root.filmDetailsBusy,
       selectedFilmTitle: root.selectedFilm ? root.selectedFilm.title : "",
+      coverLookup: root.coverLookup,
       bookSearchBusy: root.bookSearchBusy,
       bookSearchError: root.bookSearchError,
       bookResultCount: root.bookResults.length,
@@ -1114,6 +1201,13 @@ Item {
     // type: game|film|book|music|comic. Async; read the result with entries().
     function loadEntries(type: string): string {
       return root.loadEntries(type) ? "ok" : "unhandled"
+    }
+
+    // path: a loaded entry's path. Async; the result shows up in status().
+    function lookupCover(path: string): string {
+      for (var i = 0; i < root.entries.length; i++)
+        if (root.entries[i].path === path) return root.lookupCover(root.entries[i]) ? "ok" : "unhandled"
+      return "unhandled"
     }
 
     function entries(): string {
