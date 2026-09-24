@@ -11,8 +11,8 @@ import qs.Ui
 // ToggleSwitch) instead of hand-rolled key catching, since this is a form
 // the user types into rather than a keyboard-navigated grid.
 //
-// With an empty search box it lists your recent entries of the current
-// type; picking one (or a past entry shown under a selected search result)
+// With an empty search box it lists your recent entries of every type;
+// picking one (or a past entry shown under a selected search result)
 // opens it for editing in place instead of logging a new one.
 //
 // `service` is not wired up here — the shell's generic panel loader sets
@@ -40,7 +40,7 @@ Item {
     root.hasActiveSelection = false
     root.editingEntry = null
     root.savedConfirmation = ""
-    if (root.service) root.service.loadEntries(root.mediaType)
+    if (root.service) root.service.loadEntries()
     Qt.callLater(function() { searchField.forceActiveFocus() })
   }
 
@@ -58,11 +58,24 @@ Item {
   readonly property var mediaTypes: [
     { value: "game", label: "Game" },
     { value: "film", label: "Film" },
+    { value: "tv", label: "TV" },
     { value: "book", label: "Book" },
     { value: "music", label: "Music" },
     { value: "comic", label: "Comic" }
   ]
   property string mediaType: "game"
+
+  function typeLabel(t) {
+    for (var i = 0; i < root.mediaTypes.length; i++) if (root.mediaTypes[i].value === t) return root.mediaTypes[i].label
+    return ""
+  }
+
+  // "Search <noun>…"
+  function typeNoun(t) {
+    if (t === "tv") return "TV shows"
+    if (t === "music") return "albums"
+    return t + "s"
+  }
 
   function _isKnownType(t) {
     for (var i = 0; i < root.mediaTypes.length; i++) if (root.mediaTypes[i].value === t) return true
@@ -75,7 +88,6 @@ Item {
     root.hasActiveSelection = false
     root.editingEntry = null
     root.savedConfirmation = ""
-    if (root.service) root.service.loadEntries(next)
   }
 
   // ---------------------------------------------------- per-type dispatch
@@ -87,6 +99,7 @@ Item {
     if (!root.service) return []
     if (root.mediaType === "game") return root.service.gameResults
     if (root.mediaType === "film") return root.service.filmResults
+    if (root.mediaType === "tv") return root.service.tvResults
     if (root.mediaType === "book") return root.service.bookResults
     if (root.mediaType === "music") return root.service.musicResults
     if (root.mediaType === "comic") return root.service.comicResults
@@ -97,6 +110,7 @@ Item {
     if (!root.service) return null
     if (root.mediaType === "game") return root.service.selectedGame
     if (root.mediaType === "film") return root.service.selectedFilm
+    if (root.mediaType === "tv") return root.service.selectedTv
     if (root.mediaType === "book") return root.service.selectedBook
     if (root.mediaType === "music") return root.service.selectedAlbum
     if (root.mediaType === "comic") return root.service.selectedComic
@@ -107,6 +121,7 @@ Item {
     if (!root.service) return false
     if (root.mediaType === "game") return root.service.gameSearchBusy
     if (root.mediaType === "film") return root.service.filmSearchBusy
+    if (root.mediaType === "tv") return root.service.tvSearchBusy
     if (root.mediaType === "book") return root.service.bookSearchBusy
     if (root.mediaType === "music") return root.service.musicSearchBusy
     if (root.mediaType === "comic") return root.service.comicSearchBusy
@@ -117,6 +132,7 @@ Item {
     if (!root.service) return ""
     if (root.mediaType === "game") return root.service.gameSearchError
     if (root.mediaType === "film") return root.service.filmSearchError
+    if (root.mediaType === "tv") return root.service.tvSearchError
     if (root.mediaType === "book") return root.service.bookSearchError
     if (root.mediaType === "music") return root.service.musicSearchError
     if (root.mediaType === "comic") return root.service.comicSearchError
@@ -131,6 +147,7 @@ Item {
     var year = hit.year ? String(hit.year) : "—"
     if (root.mediaType === "game") return year + (hit.platforms ? " · " + hit.platforms : "")
     if (root.mediaType === "film") return year
+    if (root.mediaType === "tv") return year
     if (root.mediaType === "book") return year + (hit.author ? " · " + hit.author : "")
     if (root.mediaType === "music") return year + (hit.artist ? " · " + hit.artist : "")
     if (root.mediaType === "comic") return year + (hit.publisher ? " · " + hit.publisher : "")
@@ -139,18 +156,19 @@ Item {
 
   // Covers come in different shapes: game art is landscape, album art is
   // square, posters and book/comic covers are portrait.
-  function coverWidth(height) {
-    if (root.mediaType === "game") return Math.round(height * 1.5)
-    if (root.mediaType === "music") return height
+  function coverWidth(height, type) {
+    type = type || root.mediaType
+    if (type === "game") return Math.round(height * 1.5)
+    if (type === "music") return height
     return Math.round(height * 0.67)
   }
 
   // ------------------------------------------------------- past entries
   property bool showingRecent: searchField.text.trim() === ""
 
+  // Every type, newest first.
   function recentEntries() {
-    if (!root.service || root.service.entriesType !== root.mediaType) return []
-    return root.service.entries.slice(0, 25)
+    return root.service ? root.service.entries.slice(0, 30) : []
   }
 
   function pastEntries() {
@@ -158,9 +176,11 @@ Item {
     return root.service.pastEntriesFor(root.mediaType, root.selected())
   }
 
-  function entrySubtitle(entry) {
+  function entrySubtitle(entry, withType) {
     var f = entry.fields || {}
     var parts = []
+    if (withType) parts.push(root.typeLabel(f.type))
+    if (f.type === "tv" && Number(f.season) > 0) parts.push("S" + f.season)
     if (Number(f.rating) > 0) parts.push("★ " + Number(f.rating).toFixed(1))
     if (f.status) parts.push(String(f.status))
     if (f.date_logged) parts.push(String(f.date_logged))
@@ -178,7 +198,7 @@ Item {
 
   function rowSubtitle(item) {
     if (!item) return ""
-    if (root.showingRecent) return root.entrySubtitle(item)
+    if (root.showingRecent) return root.entrySubtitle(item, true)
     var sub = root.resultSubtitle(item)
     var logged = root.service ? root.service.pastEntriesFor(root.mediaType, item).length : 0
     if (logged) sub += " · logged" + (logged > 1 ? " ×" + logged : "")
@@ -205,6 +225,10 @@ Item {
 
   function openEntry(entry, fromForm) {
     if (!entry) return
+    // Recent mixes every type: switch the form to this entry's type without
+    // changeMediaType()'s reset.
+    var type = entry.fields && entry.fields.type
+    if (root._isKnownType(type)) root.mediaType = type
     root.editingEntry = entry
     root.editReturnsToForm = fromForm === true
     root.hasActiveSelection = true
@@ -226,6 +250,7 @@ Item {
     root.rewatchValue = f.rewatch === true
     reviewField.text = entry.review || ""
     hoursPlayedField.field.value = Number(f.hours_played) || 0
+    seasonField.field.value = Number(f.season) || 0
     platformField.text = f.platform ? String(f.platform) : ""
     formatField.text = f.format ? String(f.format) : ""
     labelField.text = f.label ? String(f.label) : ""
@@ -245,7 +270,7 @@ Item {
     return {
       title: s.title,
       year: s.year || "",
-      creator: s.developer || s.director || s.author || s.artist || s.publisher || "",
+      creator: s.developer || s.director || s.creator || s.author || s.artist || s.publisher || "",
       cover: s.coverUrl || ""
     }
   }
@@ -254,6 +279,7 @@ Item {
     if (!root.service) return
     if (root.mediaType === "game") root.service.searchGames(query)
     else if (root.mediaType === "film") root.service.searchFilms(query)
+    else if (root.mediaType === "tv") root.service.searchTv(query)
     else if (root.mediaType === "book") root.service.searchBooks(query)
     else if (root.mediaType === "music") root.service.searchMusic(query)
     else if (root.mediaType === "comic") root.service.searchComics(query)
@@ -264,6 +290,7 @@ Item {
     var ok = false
     if (root.mediaType === "game") ok = root.service.selectGame(hit.id)
     else if (root.mediaType === "film") ok = root.service.selectFilm(hit.id)
+    else if (root.mediaType === "tv") ok = root.service.selectTv(hit.id)
     else if (root.mediaType === "book") ok = root.service.selectBook(hit.key)
     else if (root.mediaType === "music") ok = root.service.selectAlbum(hit.id)
     else if (root.mediaType === "comic") ok = root.service.selectComic(hit.id)
@@ -288,6 +315,7 @@ Item {
     if (!root.service) return false
     if (root.mediaType === "game") return root.service.writeGameEntry(fields)
     if (root.mediaType === "film") return root.service.writeFilmEntry(fields)
+    if (root.mediaType === "tv") return root.service.writeTvEntry(fields)
     if (root.mediaType === "book") return root.service.writeBookEntry(fields)
     if (root.mediaType === "music") return root.service.writeMusicEntry(fields)
     if (root.mediaType === "comic") return root.service.writeComicEntry(fields)
@@ -297,6 +325,7 @@ Item {
   function defaultStatus() {
     if (root.mediaType === "game") return "playing"
     if (root.mediaType === "film") return "watched"
+    if (root.mediaType === "tv") return "watching"
     if (root.mediaType === "book") return "reading"
     if (root.mediaType === "music") return "listened"
     if (root.mediaType === "comic") return "reading"
@@ -306,6 +335,7 @@ Item {
   function statusOptions() {
     if (root.mediaType === "game") return ["playing", "completed", "dropped", "backlog"]
     if (root.mediaType === "film") return ["watched", "rewatching", "dropped"]
+    if (root.mediaType === "tv") return ["watching", "completed", "rewatching", "dropped", "backlog"]
     if (root.mediaType === "book") return ["reading", "read", "dnf", "backlog"]
     if (root.mediaType === "music") return ["listened", "favorite"]
     if (root.mediaType === "comic") return ["reading", "read", "dropped", "backlog"]
@@ -338,6 +368,7 @@ Item {
     root.rewatchValue = false
     reviewField.text = ""
     hoursPlayedField.field.value = 0
+    seasonField.field.value = 0
     platformField.text = ""
     formatField.text = ""
     labelField.text = ""
@@ -352,6 +383,7 @@ Item {
       status: root.statusValue,
       dateLogged: "",
       hoursPlayed: hoursPlayedField.field.value,
+      season: seasonField.field.value,
       platform: platformField.text,
       rewatch: root.rewatchValue,
       format: formatField.text,
@@ -531,7 +563,7 @@ Item {
             TextField {
               id: searchField
               width: parent.width
-              placeholderText: "Search " + root.mediaType + "s…"
+              placeholderText: "Search " + root.typeNoun(root.mediaType) + "…"
               onTextChanged: searchDebounce.restart()
               Keys.onReturnPressed: { searchDebounce.stop(); root.runSearch(text) }
             }
@@ -551,7 +583,7 @@ Item {
               textFormat: Text.PlainText
               width: parent.width
               visible: root.showingRecent
-              text: root.recentEntries().length ? "Recent" : "Nothing logged yet. Search to log your first " + root.mediaType + "."
+              text: root.recentEntries().length ? "Recent" : "Nothing logged yet. Search above to log your first entry."
               color: Qt.darker(root.foreground, 1.4)
               font.family: Style.font.family
               font.pixelSize: Style.font.bodySmall
@@ -579,15 +611,23 @@ Item {
                     onClicked: root.activateRow(resultRow.modelData)
                   }
 
-                  Cover {
+                  // Fixed-width slot (as wide as the widest, landscape,
+                  // cover) so titles line up across mixed cover shapes.
+                  Item {
                     id: rowCover
                     anchors.left: parent.left
                     anchors.verticalCenter: parent.verticalCenter
                     anchors.leftMargin: Style.spacing.controlPaddingX
                     height: Style.space(44)
-                    width: root.coverWidth(height)
-                    url: root.rowCover(resultRow.modelData)
-                    tint: root.foreground
+                    width: root.coverWidth(height, "game")
+
+                    Cover {
+                      anchors.centerIn: parent
+                      height: parent.height
+                      width: root.coverWidth(height, root.showingRecent && resultRow.modelData.fields ? resultRow.modelData.fields.type : root.mediaType)
+                      url: root.rowCover(resultRow.modelData)
+                      tint: root.foreground
+                    }
                   }
 
                   Column {
@@ -891,6 +931,36 @@ Item {
                 color: root.foreground
                 font.family: Style.font.family
                 font.pixelSize: Style.font.body
+              }
+            }
+
+            // ----------------------------------------------- TV-specific
+            Row {
+              width: parent.width
+              spacing: Style.spacing.md
+              visible: root.mediaType === "tv"
+
+              NumberField {
+                id: seasonField
+                label: "Season"
+                from: 0
+                to: 100
+                value: 0
+              }
+              Text {
+                textFormat: Text.PlainText
+                anchors.verticalCenter: parent.verticalCenter
+                width: parent.width - seasonField.width - Style.spacing.md
+                wrapMode: Text.WordWrap
+                text: {
+                  var s = root.selected()
+                  var total = s && root.mediaType === "tv" && s.seasons ? " (" + s.seasons + " total)" : ""
+                  return "0 = the whole show" + total
+                }
+                color: root.foreground
+                opacity: 0.6
+                font.family: Style.font.family
+                font.pixelSize: Style.font.caption
               }
             }
 

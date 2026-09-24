@@ -1,7 +1,7 @@
 # Media Journal
 
 A running dashboard over everything logged by the Media Journal plugin —
-films, books, games, comics, music. Powered by [Dataview](https://blacksmithgu.github.io/obsidian-dataview/);
+films, TV, books, games, comics, music. Powered by [Dataview](https://blacksmithgu.github.io/obsidian-dataview/);
 every table below reads live off the frontmatter in `Media/**`.
 
 ## This month
@@ -27,7 +27,7 @@ SORT rating DESC
 ```dataview
 TABLE type, creator, status, date_logged AS "Started"
 FROM "Media"
-WHERE status = "playing" OR status = "reading" OR status = "rewatching"
+WHERE status = "playing" OR status = "reading" OR status = "watching" OR status = "rewatching"
 SORT date_logged DESC
 ```
 
@@ -46,6 +46,14 @@ SORT date_logged DESC
 ```dataview
 TABLE creator AS "Director", year, runtime, rewatch, rating, date_logged AS "Logged"
 FROM "Media/Films"
+SORT date_logged DESC
+```
+
+### 📺 TV
+
+```dataview
+TABLE creator AS "Creator", network, season, seasons AS "Seasons", rating, status, date_logged AS "Logged"
+FROM "Media/TV"
 SORT date_logged DESC
 ```
 

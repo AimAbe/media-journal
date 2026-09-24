@@ -14,8 +14,8 @@ import "lib/ComicVine.js" as ComicVine
 // the IpcHandler below exists for external callers (keybindings, testing)
 // and mirrors the same operations behind typed string args.
 //
-// This file covers all five media types from plan.md: RAWG (games), TMDB
-// (films), Open Library (books), MusicBrainz (music), Comic Vine (comics).
+// This file covers six media types: RAWG (games), TMDB (films and TV),
+// Open Library (books), MusicBrainz (music), Comic Vine (comics).
 // Each follows the same shape: a lib/<Api>.js normalizer, a search (+
 // details, if the search endpoint is thin) Process, and a writeXEntry()
 // that hands off to the shared saveEntry(). Open Library's, MusicBrainz's,
@@ -363,6 +363,132 @@ Item {
     }
 
     return root.saveEntry("Films", entry, fields.review, film.id)
+  }
+
+  // -------------------------------------------------------------- TV search
+  //
+  // Same TMDB key as films. Like films, the search hit is thin (no creator,
+  // network or season count), so selecting one fetches details.
+  property bool tvSearchBusy: false
+  property string tvSearchError: ""
+  property string tvSearchQuery: ""
+  property var tvResults: []   // [{id, title, year, overview, coverUrl, tmdbRating}]
+
+  function searchTv(query) {
+    if (root.tvSearchBusy) return false   // tvSearchProc is a single shared Process
+
+    query = String(query || "").trim()
+    root.tvSearchQuery = query
+    root.tvResults = []
+    root.tvSearchError = ""
+
+    if (!root.tmdbApiKey) {
+      root.tvSearchError = "No TMDB API key configured (" + root.configPath + ")"
+      return false
+    }
+    if (!query) return false
+
+    root.tvSearchBusy = true
+    tvSearchProc.command = ["curl", "-fsS", "--max-time", "8", Tmdb.tvSearchUrl(root.tmdbApiKey, query)]
+    tvSearchProc.running = true
+    return true
+  }
+
+  Process {
+    id: tvSearchProc
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        root.tvSearchBusy = false
+        var raw = String(text || "").trim()
+        if (!raw) {
+          root.tvSearchError = "TMDB search failed (network error or bad API key)"
+          return
+        }
+        try {
+          root.tvResults = Tmdb.parseTvSearchResults(raw)
+          if (root.tvResults.length === 0)
+            root.tvSearchError = "No results for \"" + root.tvSearchQuery + "\""
+        } catch (e) {
+          root.tvSearchError = "Could not parse TMDB response: " + e
+        }
+      }
+    }
+  }
+
+  property bool tvDetailsBusy: false
+  property string tvDetailsError: ""
+  property var selectedTv: null   // normalized search hit, merged with details once loaded
+
+  function selectTv(id) {
+    if (root.tvDetailsBusy) return false   // tvDetailsProc is a single shared Process
+
+    var hit = null
+    for (var i = 0; i < root.tvResults.length; i++) {
+      if (root.tvResults[i].id === id) { hit = root.tvResults[i]; break }
+    }
+    if (!hit) return false
+
+    root.selectedTv = hit
+    root.tvDetailsError = ""
+    root.tvDetailsBusy = true
+    tvDetailsProc.command = ["curl", "-fsS", "--max-time", "8", Tmdb.tvDetailsUrl(root.tmdbApiKey, id)]
+    tvDetailsProc.running = true
+    return true
+  }
+
+  Process {
+    id: tvDetailsProc
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        root.tvDetailsBusy = false
+        var raw = String(text || "").trim()
+        if (!raw) {
+          root.tvDetailsError = "Could not load show details"
+          return
+        }
+        try {
+          var details = Tmdb.parseTvDetails(raw)
+          // Only apply if the user hasn't picked something else meanwhile.
+          if (root.selectedTv && root.selectedTv.id === details.id)
+            root.selectedTv = Object.assign({}, root.selectedTv, details)
+        } catch (e) {
+          root.tvDetailsError = "Could not parse TMDB details: " + e
+        }
+      }
+    }
+  }
+
+  // fields: { rating, review, status, season, dateLogged }
+  // network/seasons come from TMDB; season is the one this log is about
+  // (optional, 0 or empty = the show as a whole).
+  function writeTvEntry(fields) {
+    fields = fields || {}
+
+    if (!root.selectedTv) {
+      root.saveError = "No show selected"
+      return false
+    }
+
+    var show = root.selectedTv
+    var entry = {
+      type: "tv",
+      title: show.title,
+      creator: show.creator || "",
+      year: show.year,
+      rating: fields.rating,
+      status: fields.status || "watching",
+      date_logged: fields.dateLogged || Frontmatter.today(),
+      tags: ["media/tv"],
+      network: show.network || "",
+      seasons: show.seasons,
+      season: Number(fields.season) > 0 ? Number(fields.season) : null,
+      cover: show.coverUrl || "",
+      source_id: root.sourceIdFor("tv", show)
+    }
+
+    return root.saveEntry("TV", entry, fields.review, show.id)
   }
 
   // ------------------------------------------------------------ book search
@@ -750,7 +876,7 @@ Item {
       root.lastSavedPath = root._pendingWrite ? root._pendingWrite.path : writerFile.path
       root._pendingWrite = null
       root.saveCount++
-      if (folder && folder === root.entriesFolder) root.loadEntries(root.entriesType)
+      if (folder) root.loadEntries()
     }
     onSaveFailed: function(error) {
       root.saveBusy = false
@@ -761,11 +887,11 @@ Item {
 
   // ---------------------------------------------------------- past entries
   //
-  // The notes already in <vault>/Media/<Folder>/, parsed back so the menu
-  // can list them and edit one in place. One type is loaded at a time (the
-  // one the menu is showing); a personal journal is small enough that
-  // re-reading the folder on every menu open is cheap.
-  readonly property var _folders: ({ game: "Games", film: "Films", book: "Books", music: "Music", comic: "Comics" })
+  // Every note in <vault>/Media/<Folder>/ for all types, parsed back so the
+  // menu can list them (newest first, all types mixed) and edit one in
+  // place. A personal journal is small enough that re-reading the folders
+  // on every menu open is cheap.
+  readonly property var _folders: ({ game: "Games", film: "Films", tv: "TV", book: "Books", music: "Music", comic: "Comics" })
 
   function folderForType(type) {
     return root._folders[type] || ""
@@ -777,6 +903,7 @@ Item {
     if (!item) return ""
     if (type === "game" && item.id) return "rawg:" + item.id
     if (type === "film" && item.id) return "tmdb:" + item.id
+    if (type === "tv" && item.id) return "tmdb-tv:" + item.id
     if (type === "book" && item.key) return "openlibrary:" + item.key
     if (type === "music" && item.id) return "musicbrainz:" + item.id
     if (type === "comic" && item.id) return "comicvine:" + item.id
@@ -784,34 +911,29 @@ Item {
   }
 
   property var entries: []          // [{path, fileName, title, fields, review}], newest first
-  property string entriesType: ""
-  property string entriesFolder: ""
   property bool entriesBusy: false
   property string entriesError: ""
-  property string _entriesPendingType: ""
+  property bool _entriesReloadPending: false
 
-  function loadEntries(type) {
-    var folder = root.folderForType(type)
-    if (!folder || !root.vaultPath) {
+  function loadEntries() {
+    if (!root.vaultPath) {
       root.entries = []
-      root.entriesType = type || ""
-      root.entriesFolder = folder
       return false
     }
     if (root.entriesBusy) {   // entriesProc is a single shared Process
-      root._entriesPendingType = type
+      root._entriesReloadPending = true
       return true
     }
-    if (type !== root.entriesType) root.entries = []
-    root.entriesType = type
-    root.entriesFolder = folder
+    var dirs = []
+    for (var t in root._folders) dirs.push(root.vaultPath + "/Media/" + root._folders[t])
     root.entriesBusy = true
     root.entriesError = ""
-    // Each note is emitted as RS <path> US <contents>; the control bytes
-    // can't appear in a path or in a markdown note in practice.
+    // Each note is emitted as RS <path> US <mtime> US <contents>; the
+    // control bytes can't appear in a path or in a markdown note in
+    // practice. mtime orders entries logged on the same day.
     entriesProc.command = ["sh", "-c",
-      'for f in "$1"/*.md; do [ -f "$f" ] || continue; printf "\\036%s\\037" "$f"; cat "$f"; done',
-      "sh", root.vaultPath + "/Media/" + folder]
+      'for d in "$@"; do for f in "$d"/*.md; do [ -f "$f" ] || continue; printf "\\036%s\\037%s\\037" "$f" "$(stat -c %Y "$f")"; cat "$f"; done; done',
+      "sh"].concat(dirs)
     entriesProc.running = true
     return true
   }
@@ -828,12 +950,18 @@ Item {
           var sep = chunks[i].indexOf("\u001f")
           if (sep < 0) continue
           var path = chunks[i].slice(0, sep)
+          var rest = chunks[i].slice(sep + 1)
+          var sep2 = rest.indexOf("\u001f")
+          if (sep2 < 0) continue
+          var mtime = Number(rest.slice(0, sep2)) || 0
           try {
-            var note = Frontmatter.parseNote(chunks[i].slice(sep + 1))
+            var note = Frontmatter.parseNote(rest.slice(sep2 + 1))
+            if (!root._folders[note.fields.type]) continue   // not a journal entry
             list.push({
               path: path,
               fileName: path.slice(path.lastIndexOf("/") + 1),
               title: String(note.fields.title || note.heading || ""),
+              mtime: mtime,
               fields: note.fields,
               review: note.review
             })
@@ -844,17 +972,15 @@ Item {
         list.sort(function(a, b) {
           var da = String(a.fields.date_logged || ""), db = String(b.fields.date_logged || "")
           if (da !== db) return da < db ? 1 : -1
-          // Same day: a re-log's name is the original's plus a -<date>(-N)
-          // suffix, so the longer name is the newer one.
-          if (a.fileName.length !== b.fileName.length) return b.fileName.length - a.fileName.length
+          // Same day: last written first.
+          if (a.mtime !== b.mtime) return b.mtime - a.mtime
           return a.fileName < b.fileName ? 1 : -1
         })
         root.entries = list
 
-        if (root._entriesPendingType) {
-          var next = root._entriesPendingType
-          root._entriesPendingType = ""
-          root.loadEntries(next)
+        if (root._entriesReloadPending) {
+          root._entriesReloadPending = false
+          root.loadEntries()
         }
       }
     }
@@ -864,13 +990,14 @@ Item {
   // match, or, for notes written before source_id existed, the filename
   // this plugin would have given it (<slug>.md or a dated re-log of it).
   function pastEntriesFor(type, item) {
-    if (!item || type !== root.entriesType) return []
+    if (!item) return []
     var sid = root.sourceIdFor(type, item)
     var slug = Frontmatter.slugify(item.title, type === "book" ? item.key : item.id)
     var byName = new RegExp("^" + slug.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "(-\\d{4}-\\d{2}-\\d{2}(-\\d+)?)?\\.md$")
     var out = []
     for (var i = 0; i < root.entries.length; i++) {
       var e = root.entries[i]
+      if (e.fields.type !== type) continue
       var eSid = String(e.fields.source_id || "")
       if (eSid ? eSid === sid : byName.test(e.fileName)) out.push(e)
     }
@@ -911,6 +1038,8 @@ Item {
       changes.hours_played = fields.hoursPlayed
     } else if (type === "film") {
       changes.rewatch = fields.rewatch === true
+    } else if (type === "tv") {
+      changes.season = Number(fields.season) > 0 ? Number(fields.season) : null
     } else if (type === "book") {
       changes.format = fields.format
     } else if (type === "music") {
@@ -970,6 +1099,7 @@ Item {
   function _catalogSearchUrl(type, title) {
     if (type === "game") return root.rawgApiKey ? Rawg.searchUrl(root.rawgApiKey, title, 10) : ""
     if (type === "film") return root.tmdbApiKey ? Tmdb.searchUrl(root.tmdbApiKey, title) : ""
+    if (type === "tv") return root.tmdbApiKey ? Tmdb.tvSearchUrl(root.tmdbApiKey, title) : ""
     if (type === "book") return OpenLibrary.searchUrl(title, 10)
     if (type === "music") return MusicBrainz.searchUrl(title, 10)
     if (type === "comic") return root.comicVineApiKey ? ComicVine.searchUrl(root.comicVineApiKey, title, 10) : ""
@@ -979,6 +1109,7 @@ Item {
   function _parseCatalogResults(type, raw) {
     if (type === "game") return Rawg.parseSearchResults(raw)
     if (type === "film") return Tmdb.parseSearchResults(raw)
+    if (type === "tv") return Tmdb.parseTvSearchResults(raw)
     if (type === "book") return OpenLibrary.parseSearchResults(raw)
     if (type === "music") return MusicBrainz.parseSearchResults(raw)
     if (type === "comic") return ComicVine.parseSearchResults(raw)
@@ -1066,6 +1197,11 @@ Item {
       filmDetailsBusy: root.filmDetailsBusy,
       selectedFilmTitle: root.selectedFilm ? root.selectedFilm.title : "",
       coverLookup: root.coverLookup,
+      tvSearchBusy: root.tvSearchBusy,
+      tvSearchError: root.tvSearchError,
+      tvResultCount: root.tvResults.length,
+      tvDetailsBusy: root.tvDetailsBusy,
+      selectedTvTitle: root.selectedTv ? root.selectedTv.title : "",
       bookSearchBusy: root.bookSearchBusy,
       bookSearchError: root.bookSearchError,
       bookResultCount: root.bookResults.length,
@@ -1198,9 +1334,30 @@ Item {
       return root.writeComicEntry(fields) ? "ok" : "unhandled"
     }
 
-    // type: game|film|book|music|comic. Async; read the result with entries().
-    function loadEntries(type: string): string {
-      return root.loadEntries(type) ? "ok" : "unhandled"
+    // Async (all types); read the result with entries().
+    function loadEntries(): string {
+      return root.loadEntries() ? "ok" : "unhandled"
+    }
+
+    function searchTv(query: string): string {
+      return root.searchTv(query) ? "ok" : "unhandled"
+    }
+
+    function selectTv(id: string): string {
+      var n = parseInt(id, 10)
+      if (isNaN(n)) return "unhandled"
+      return root.selectTv(n) ? "ok" : "unhandled"
+    }
+
+    // fieldsJson: {"rating":4.5,"review":"...","status":"watching","season":2}
+    function logTv(fieldsJson: string): string {
+      var fields
+      try {
+        fields = JSON.parse(fieldsJson)
+      } catch (e) {
+        return "bad-json"
+      }
+      return root.writeTvEntry(fields) ? "ok" : "unhandled"
     }
 
     // path: a loaded entry's path. Async; the result shows up in status().
@@ -1211,7 +1368,7 @@ Item {
     }
 
     function entries(): string {
-      return JSON.stringify({ type: root.entriesType, busy: root.entriesBusy, error: root.entriesError, entries: root.entries })
+      return JSON.stringify({ busy: root.entriesBusy, error: root.entriesError, entries: root.entries })
     }
 
     // fieldsJson: same shape as the matching logX() call, plus "review".

@@ -1,7 +1,8 @@
 # Media Journal
 
 An [Omarchy](https://omarchy.org) Quickshell plugin for logging what you
-watch, read, play, and listen to — films, books, games, comics, music —
+watch, read, play, and listen to — films, TV shows, books, games, comics,
+music —
 straight into an Obsidian vault as markdown notes with ratings and reviews.
 Letterboxd + Goodreads + a game/music/comic log, unified into one personal
 media diary that lives in plain files you already own.
@@ -10,8 +11,8 @@ Search happens against the real catalog for each media type, so a logged
 entry starts with real metadata (year, developer, director, author, artist,
 publisher, ...) and cover art. You just add your rating, review, and status.
 
-With the search box empty, the menu lists your recent entries. Click one to
-read it or edit it. Pick a search result you've logged before and your past
+With the search box empty, the menu lists your recent entries of every type,
+newest first. Click one to read it or edit it. Pick a search result you've logged before and your past
 entries for it appear above the form, with the start of each review; click
 one to edit it in place.
 
@@ -19,6 +20,7 @@ one to edit it in place.
 |--------|------------------------------------------------------------------|:-------:|
 | Game   | [RAWG](https://rawg.io/apidocs)                                   | yes     |
 | Film   | [TMDB](https://www.themoviedb.org/settings/api)                   | yes     |
+| TV     | [TMDB](https://www.themoviedb.org/settings/api) (same key)        | yes     |
 | Book   | [Open Library](https://openlibrary.org/dev/docs/api/search)       | no      |
 | Music  | [MusicBrainz](https://musicbrainz.org/doc/MusicBrainz_API)         | no      |
 | Comic  | [Comic Vine](https://comicvine.gamespot.com/api/)                  | yes     |
@@ -111,6 +113,7 @@ plaintext API keys) — if you ever hand-edit it, that's expected, not a bug.
 <vaultPath>/Media/
   Games/<slug>.md
   Films/<slug>.md
+  TV/<slug>.md
   Books/<slug>.md
   Music/<slug>.md
   Comics/<slug>.md
@@ -126,8 +129,8 @@ Every note has these shared fields:
 
 | Field | Meaning |
 |-------|---------|
-| `type` | `game`, `film`, `book`, `music` or `comic` |
-| `title`, `creator`, `year` | From the catalog. `creator` is the developer, director, author, artist or writer. `year` is the release year |
+| `type` | `game`, `film`, `tv`, `book`, `music` or `comic` |
+| `title`, `creator`, `year` | From the catalog. `creator` is the developer, director, show creator, author, artist or writer. `year` is the release (or first air) year |
 | `rating` | 0–5 in half steps. `0` means unrated |
 | `status` | See below |
 | `date_logged` | `YYYY-MM-DD`, the day you logged it |
@@ -141,6 +144,7 @@ Each type adds its own fields, and each has its own status values:
 |------|--------------|---------------|
 | Game | `platform`, `hours_played`, `developer` | `playing`, `completed`, `dropped`, `backlog` |
 | Film | `director`, `runtime`, `rewatch` | `watched`, `rewatching`, `dropped` |
+| TV | `network`, `seasons` (total), `season` (the one you watched; omitted for the whole show) | `watching`, `completed`, `rewatching`, `dropped`, `backlog` |
 | Book | `author`, `pages`, `format` | `reading`, `read`, `dnf`, `backlog` |
 | Music | `artist`, `album`, `format`, `label` | `listened`, `favorite` |
 | Comic | `writer`, `artist`, `publisher`, `issues`, `volume` | `reading`, `read`, `dropped`, `backlog` |
