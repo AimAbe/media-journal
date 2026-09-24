@@ -664,7 +664,7 @@ Item {
   // Shared by every media type: one mkdir + one FileView write at a time.
   // Guarded by a single saveBusy flag rather than a per-type one, since a
   // per-type guard wouldn't stop a game save and a film save from stomping
-  // on this same mkdirProc/writerFile pair.
+  // on this same pathProc/writerFile pair.
   property bool saveBusy: false
   property string saveError: ""
   property string lastSavedPath: ""
@@ -685,29 +685,46 @@ Item {
     }
 
     var dir = root.vaultPath + "/Media/" + folderName
-    var filePath = dir + "/" + Frontmatter.slugify(entry.title, uniqueId) + ".md"
+    var slug = Frontmatter.slugify(entry.title, uniqueId)
     var markdown = Frontmatter.buildNote(entry, review || "")
 
     root.saveBusy = true
     root.saveError = ""
-    root._pendingWrite = { path: filePath, markdown: markdown }
-    mkdirProc.command = ["mkdir", "-p", dir]
-    mkdirProc.running = true
+    root._pendingWrite = { path: "", markdown: markdown }
+    // Re-logging a title must never clobber the earlier note (and its
+    // review): the first log gets <slug>.md, later ones <slug>-<date>.md,
+    // and same-day repeats <slug>-<date>-2.md, -3, ... The shell picks the
+    // first free name and prints it; empty output means mkdir failed.
+    // Values go in as positional args, never spliced into the script.
+    pathProc.command = ["sh", "-c",
+      'mkdir -p "$1" || exit 1\n' +
+      'base="$1/$2"\n' +
+      'if [ ! -e "$base.md" ]; then printf "%s" "$base.md"; exit 0; fi\n' +
+      'p="$base-$3.md"; n=2\n' +
+      'while [ -e "$p" ]; do p="$base-$3-$n.md"; n=$((n + 1)); done\n' +
+      'printf "%s" "$p"',
+      "sh", dir, slug, entry.date_logged || Frontmatter.today()]
+    pathProc.running = true
     return true
   }
 
   Process {
-    id: mkdirProc
-    onExited: function(exitCode) {
-      if (exitCode !== 0) {
-        root.saveBusy = false
-        root.saveError = "Could not create vault folder (mkdir exited " + exitCode + ")"
-        root._pendingWrite = null
-        return
+    id: pathProc
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        var path = String(text || "").trim()
+        if (!path) {
+          root.saveBusy = false
+          root.saveError = "Could not create vault folder under " + root.vaultPath + "/Media"
+          root._pendingWrite = null
+          return
+        }
+        if (!root._pendingWrite) return
+        root._pendingWrite.path = path
+        writerFile.path = path
+        writerFile.setText(root._pendingWrite.markdown)
       }
-      if (!root._pendingWrite) return
-      writerFile.path = root._pendingWrite.path
-      writerFile.setText(root._pendingWrite.markdown)
     }
   }
 
