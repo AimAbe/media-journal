@@ -1,20 +1,31 @@
 # Media Journal
 
 An [Omarchy](https://omarchy.org) Quickshell plugin for logging what you
-watch, read, play, and listen to — films, TV shows, books, games, comics,
-music —
-straight into an Obsidian vault as markdown notes with ratings and reviews.
-Letterboxd + Goodreads + a game/music/comic log, unified into one personal
-media diary that lives in plain files you already own.
+watch, read, play, and listen to (films, TV shows, books, games, comics and
+music) straight into an Obsidian vault as markdown notes with ratings and
+reviews. Think Letterboxd + Goodreads + a TV, game, music and comic log,
+unified into one personal media diary that lives in plain files you already
+own.
 
-Search happens against the real catalog for each media type, so a logged
-entry starts with real metadata (year, developer, director, author, artist,
-publisher, ...) and cover art. You just add your rating, review, and status.
+## Features
 
-With the search box empty, the menu lists your recent entries of every type,
-newest first. Click one to read it or edit it. Pick a search result you've logged before and your past
-entries for it appear above the form, with the start of each review; click
-one to edit it in place.
+- **Real catalog search** for each media type, so every entry starts with
+  real metadata (year, developer, director, creator, author, artist,
+  publisher, ...) and cover art. You add your rating, review and status.
+- **Cover art** in search results, in the entry form and in your recent
+  entries, and saved to each note.
+- **Recent entries:** with the search box empty, the menu lists your latest
+  entries of every type, newest first. Click one to read or edit it.
+- **Logged before:** pick a search result you've logged already and your past
+  entries for it appear above the form, with the start of each review.
+- **Edit in place:** change the rating, status or review of any past entry,
+  or add to the review. Anything else in the note, including edits you made
+  in Obsidian, is kept.
+- **Re-logs never overwrite:** rewatching a film or replaying a game saves a
+  new dated note, so each time keeps its own rating and review. TV entries
+  can be logged per season.
+- **Dataview dashboard** for Obsidian: this month, best of the year, in
+  progress, per-type tables and all-time stats.
 
 | Type   | Source                                                          | API key |
 |--------|------------------------------------------------------------------|:-------:|
@@ -97,8 +108,10 @@ if you fork or update this repo:
 
 - `vaultPath` is required for anything else to work.
 - `rawgApiKey` / `tmdbApiKey` / `comicVineApiKey` are only needed for the
-  media types that use them (games/films/comics) — Open Library and
-  MusicBrainz need no key at all.
+  media types that use them (games, films and TV, comics). Open Library
+  and MusicBrainz need no key at all. All three keys are free:
+  [RAWG](https://rawg.io/apidocs), [TMDB](https://www.themoviedb.org/settings/api),
+  [Comic Vine](https://comicvine.gamespot.com/api/).
 - `musicbrainzContact` is optional but recommended: MusicBrainz's usage
   policy asks every client to identify itself with a way to reach the
   maintainer. Left blank, requests still work, just with a worse spot in
@@ -153,18 +166,40 @@ Empty fields are left out of the frontmatter. Editing an entry from the menu
 rewrites only rating, status, the review and the type's own fields shown in
 the form. Any other lines, including ones you added in Obsidian, are kept.
 Notes from before `cover` and `source_id` existed get them filled in the
-first time you edit them from a search result. For comics, `writer` and
+next time you edit them: from the search result you opened them under, or
+from an exact title match in the catalog. For comics, `writer` and
 `artist` are typed in by you, because Comic Vine only lists credits per
 issue, not per volume.
 
 ## Dashboard
 
 Copy `Media Journal.md` from this repo into your vault's `Media/` folder for a
-[Dataview](https://blacksmithgu.github.io/obsidian-dataview/) dashboard —
-this month, best of the year (by date logged), in-progress, per-type tables,
-and an all-time stats summary (average ratings skip unrated entries).
+[Dataview](https://blacksmithgu.github.io/obsidian-dataview/) dashboard:
+this month, best of the year (by date logged), in progress, a table per
+type, and all-time stats (average ratings skip unrated entries).
 Requires the Dataview community plugin installed and enabled in Obsidian.
 Open it in Reading view or Live Preview. Source mode shows the raw queries.
+
+## Scripting (IPC)
+
+Everything the menu does is also available over IPC, e.g. from a keybinding
+or a script:
+
+```bash
+omarchy-shell mediajournal status                  # config + busy/error state, JSON
+omarchy-shell mediajournal searchFilms "Heat"      # async; results land in the service
+omarchy-shell mediajournal selectFilm 949
+omarchy-shell mediajournal logFilm '{"rating":4.5,"status":"watched","review":"..."}'
+omarchy-shell mediajournal loadEntries             # then:
+omarchy-shell mediajournal entries                 # every logged entry, JSON
+omarchy-shell mediajournal editEntry "<path>" '{"rating":5,"status":"watched","review":"..."}'
+```
+
+Each type has `searchX` / `selectX` / `logX`: Games, Films, Tv, Books,
+Album (`searchMusic`/`selectAlbum`/`logMusic`) and Comics. `logX` takes the
+same fields as the form (`rating`, `status`, `review`, plus the type's own,
+such as `hoursPlayed`, `platform`, `season`, `format`). `editEntry` only
+accepts notes under `<vaultPath>/Media/`.
 
 ## Architecture, for anyone extending this
 
@@ -180,11 +215,19 @@ Open it in Reading view or Live Preview. Source mode shows the raw queries.
 - `BarWidget.qml` — a `qs.Ui.BarIconButton` that toggles the menu via
   `omarchy-shell shell toggle`, matching the convention every first-party
   icon-only widget uses.
+- `lib/Frontmatter.js` — builds notes, and parses and updates them for
+  past entries and editing. Updates only touch the keys they're given.
 
-Adding a media type means one `lib/<Api>.js` normalizer, a search (+
-details, if the search endpoint doesn't carry enough) `Process` in
-`Service.qml`, and a `writeXEntry()` that builds the frontmatter object and
-calls `saveEntry()`.
+Adding a media type means:
+
+1. A normalizer in `lib/<Api>.js` that returns `{id, title, year, coverUrl, ...}`.
+2. In `Service.qml`: a search `Process` (plus a details one if the search
+   endpoint is thin), a `writeXEntry()` that builds the frontmatter and calls
+   `saveEntry()`, and entries in `_folders`, `sourceIdFor()`,
+   `_editChanges()` and the cover-lookup helpers.
+3. In `MediaMenu.qml`: the type in `mediaTypes`, a branch in each per-type
+   dispatch function, its status values, and any type-specific form fields.
+4. A table in `Media Journal.md`.
 
 To hack on it, install your local clone as a git checkout, not a symlink:
 `omarchy plugin add ~/path/to/media-journal --enable`. The installed copy only
