@@ -112,8 +112,10 @@ plaintext API keys) — if you ever hand-edit it, that's expected, not a bug.
 ```
 
 Each note is YAML frontmatter followed by your review as the note body. Files
-are named after a slug of the title, and logging the same title again
-overwrites its note.
+are named after a slug of the title. Logging the same title again never
+overwrites the earlier note: the re-log is saved as `<slug>-<date>.md` (and
+`<slug>-<date>-2.md`, ... for more than one on the same day), so every
+rewatch or replay keeps its own rating and review.
 
 Every note has these shared fields:
 
