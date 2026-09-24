@@ -154,11 +154,10 @@ Item {
     return year
   }
 
-  // Covers come in different shapes: game art is landscape, album art is
-  // square, posters and book/comic covers are portrait.
+  // Album art is square; everything else is shown as a 2:3 portrait
+  // (games use Steam box art, or RAWG's landscape art cropped to fit).
   function coverWidth(height, type) {
     type = type || root.mediaType
-    if (type === "game") return Math.round(height * 1.5)
     if (type === "music") return height
     return Math.round(height * 0.67)
   }
@@ -611,15 +610,15 @@ Item {
                     onClicked: root.activateRow(resultRow.modelData)
                   }
 
-                  // Fixed-width slot (as wide as the widest, landscape,
+                  // Fixed-width slot (as wide as the widest, square,
                   // cover) so titles line up across mixed cover shapes.
                   Item {
                     id: rowCover
                     anchors.left: parent.left
                     anchors.verticalCenter: parent.verticalCenter
                     anchors.leftMargin: Style.spacing.controlPaddingX
-                    height: Style.space(44)
-                    width: root.coverWidth(height, "game")
+                    height: Style.space(52)
+                    width: root.coverWidth(height, "music")
 
                     Cover {
                       anchors.centerIn: parent

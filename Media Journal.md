@@ -8,7 +8,7 @@ load from the web, so they need a connection to show.
 ## This month
 
 ```dataview
-TABLE choice(cover, "![|" + choice(type = "game", "90", "60") + "](" + cover + ")", "") AS "Cover", type, creator, rating, date_logged AS "Logged"
+TABLE choice(cover, "![|60](" + cover + ")", "") AS "Cover", type, creator, rating, date_logged AS "Logged"
 FROM "Media"
 WHERE dateformat(date_logged, "yyyy-MM") = dateformat(date(today), "yyyy-MM")
 SORT date_logged DESC
@@ -17,7 +17,7 @@ SORT date_logged DESC
 ## Best of the year
 
 ```dataview
-TABLE choice(cover, "![|" + choice(type = "game", "90", "60") + "](" + cover + ")", "") AS "Cover", title, type, creator, year AS "Released", rating
+TABLE choice(cover, "![|60](" + cover + ")", "") AS "Cover", title, type, creator, year AS "Released", rating
 FROM "Media"
 WHERE date_logged.year = date(today).year AND rating >= 4.5
 SORT rating DESC
@@ -26,7 +26,7 @@ SORT rating DESC
 ## In progress
 
 ```dataview
-TABLE choice(cover, "![|" + choice(type = "game", "90", "60") + "](" + cover + ")", "") AS "Cover", type, creator, status, date_logged AS "Started"
+TABLE choice(cover, "![|60](" + cover + ")", "") AS "Cover", type, creator, status, date_logged AS "Started"
 FROM "Media"
 WHERE status = "playing" OR status = "reading" OR status = "watching" OR status = "rewatching"
 SORT date_logged DESC
@@ -37,7 +37,7 @@ SORT date_logged DESC
 ### 🎮 Games
 
 ```dataview
-TABLE choice(cover, "![|90](" + cover + ")", "") AS "Cover", creator AS "Developer", platform, hours_played AS "Hours", rating, status, date_logged AS "Logged"
+TABLE choice(cover, "![|60](" + cover + ")", "") AS "Cover", creator AS "Developer", platform, hours_played AS "Hours", rating, status, date_logged AS "Logged"
 FROM "Media/Games"
 SORT date_logged DESC
 ```

@@ -7,6 +7,7 @@ import "lib/Tmdb.js" as Tmdb
 import "lib/OpenLibrary.js" as OpenLibrary
 import "lib/MusicBrainz.js" as MusicBrainz
 import "lib/ComicVine.js" as ComicVine
+import "lib/Steam.js" as Steam
 
 // Media Journal service. Owns config, per-media search + markdown writing.
 // A menu/bar-widget in the same shell process talks to this directly via
@@ -197,11 +198,62 @@ Item {
         try {
           var details = Rawg.parseDetails(raw)
           // Only apply if the user hasn't picked something else meanwhile.
-          if (root.selectedGame && root.selectedGame.id === details.id)
+          if (root.selectedGame && root.selectedGame.id === details.id) {
             root.selectedGame = Object.assign({}, root.selectedGame, details)
+            root._fetchGameArt(details.id)
+          }
         } catch (e) {
           root.gameDetailsError = "Could not parse RAWG details: " + e
         }
+      }
+    }
+  }
+
+  // ------------------------------------------------------------- game art
+  //
+  // RAWG's art is landscape. For games on Steam, swap in the official
+  // portrait box art (see lib/Steam.js): RAWG stores -> Steam app id ->
+  // Steam's library capsule. Best-effort: any failure keeps RAWG's image,
+  // which the menu crops to portrait anyway.
+  property bool gameArtBusy: false
+  property var _gameArtFor: null   // RAWG id the running lookup belongs to
+
+  function _fetchGameArt(rawgId) {
+    if (gameStoresProc.running || gameSteamProc.running) return
+    root._gameArtFor = rawgId
+    root.gameArtBusy = true
+    gameStoresProc.command = ["curl", "-fsS", "--max-time", "8", Rawg.storesUrl(root.rawgApiKey, rawgId)]
+    gameStoresProc.running = true
+  }
+
+  function _gameArtDone(url) {
+    root.gameArtBusy = false
+    if (url && root.selectedGame && root.selectedGame.id === root._gameArtFor)
+      root.selectedGame = Object.assign({}, root.selectedGame, { coverUrl: url })
+  }
+
+  Process {
+    id: gameStoresProc
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        var appId = null
+        try { appId = Steam.steamAppIdFromRawgStores(String(text || "")) } catch (e) { appId = null }
+        if (!appId) { root._gameArtDone(""); return }
+        gameSteamProc.command = ["curl", "-fsS", "--max-time", "8", Steam.itemsUrl(appId)]
+        gameSteamProc.running = true
+      }
+    }
+  }
+
+  Process {
+    id: gameSteamProc
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        var url = ""
+        try { url = Steam.capsuleUrlFromItems(String(text || "")) } catch (e) { url = "" }
+        root._gameArtDone(url)
       }
     }
   }
@@ -1191,6 +1243,8 @@ Item {
       gameResultCount: root.gameResults.length,
       gameDetailsBusy: root.gameDetailsBusy,
       selectedGameTitle: root.selectedGame ? root.selectedGame.title : "",
+      selectedGameCover: root.selectedGame ? root.selectedGame.coverUrl || "" : "",
+      gameArtBusy: root.gameArtBusy,
       filmSearchBusy: root.filmSearchBusy,
       filmSearchError: root.filmSearchError,
       filmResultCount: root.filmResults.length,

@@ -13,7 +13,9 @@ own.
   real metadata (year, developer, director, creator, author, artist,
   publisher, ...) and cover art. You add your rating, review and status.
 - **Cover art** in search results, in the entry form and in your recent
-  entries, and saved to each note.
+  entries, and saved to each note. Games get their official portrait box
+  art from Steam when they're on Steam (no extra key needed), otherwise
+  RAWG's art.
 - **Recent entries:** with the search box empty, the menu lists your latest
   entries of every type, newest first. Click one to read or edit it.
 - **Logged before:** pick a search result you've logged already and your past
@@ -29,7 +31,7 @@ own.
 
 | Type   | Source                                                          | API key |
 |--------|------------------------------------------------------------------|:-------:|
-| Game   | [RAWG](https://rawg.io/apidocs)                                   | yes     |
+| Game   | [RAWG](https://rawg.io/apidocs), box art from Steam               | yes     |
 | Film   | [TMDB](https://www.themoviedb.org/settings/api)                   | yes     |
 | TV     | [TMDB](https://www.themoviedb.org/settings/api) (same key)        | yes     |
 | Book   | [Open Library](https://openlibrary.org/dev/docs/api/search)       | no      |
