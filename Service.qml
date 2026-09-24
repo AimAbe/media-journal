@@ -229,7 +229,9 @@ Item {
       tags: ["media/game"],
       platform: fields.platform || game.platforms || "",
       hours_played: fields.hoursPlayed,
-      developer: game.developer || ""
+      developer: game.developer || "",
+      cover: game.coverUrl || "",
+      source_id: root.sourceIdFor("game", game)
     }
 
     return root.saveEntry("Games", entry, fields.review, game.id)
@@ -355,7 +357,9 @@ Item {
       tags: ["media/film"],
       director: film.director || "",
       runtime: film.runtime,
-      rewatch: fields.rewatch === true
+      rewatch: fields.rewatch === true,
+      cover: film.coverUrl || "",
+      source_id: root.sourceIdFor("film", film)
     }
 
     return root.saveEntry("Films", entry, fields.review, film.id)
@@ -447,7 +451,9 @@ Item {
       tags: ["media/book"],
       author: book.author || "",
       pages: book.pages,
-      format: fields.format || ""
+      format: fields.format || "",
+      cover: book.coverUrl || "",
+      source_id: root.sourceIdFor("book", book)
     }
 
     return root.saveEntry("Books", entry, fields.review, book.key)
@@ -546,7 +552,9 @@ Item {
       artist: album.artist || "",
       album: album.title,
       format: fields.format || "",
-      label: fields.label || ""
+      label: fields.label || "",
+      cover: album.coverUrl || "",
+      source_id: root.sourceIdFor("music", album)
     }
 
     return root.saveEntry("Music", entry, fields.review, album.id)
@@ -653,7 +661,9 @@ Item {
       artist: fields.artist || "",
       publisher: comic.publisher || "",
       issues: comic.issueCount,
-      volume: comic.title
+      volume: comic.title,
+      cover: comic.coverUrl || "",
+      source_id: root.sourceIdFor("comic", comic)
     }
 
     return root.saveEntry("Comics", entry, fields.review, comic.id)
@@ -668,7 +678,10 @@ Item {
   property bool saveBusy: false
   property string saveError: ""
   property string lastSavedPath: ""
-  property var _pendingWrite: null   // {path, markdown} awaiting mkdir -> write
+  // Bumped on every successful write. Editing the same note twice saves to
+  // the same path, so lastSavedPath alone can't signal "saved again".
+  property int saveCount: 0
+  property var _pendingWrite: null   // {path, markdown, folder} awaiting path pick/read -> write
 
   // entry: frontmatter fields (shared shape + type-specific ones), must
   // include `type` and `title`. folderName: vault subfolder under Media/.
@@ -690,7 +703,7 @@ Item {
 
     root.saveBusy = true
     root.saveError = ""
-    root._pendingWrite = { path: "", markdown: markdown }
+    root._pendingWrite = { path: "", markdown: markdown, folder: folderName }
     // Re-logging a title must never clobber the earlier note (and its
     // review): the first log gets <slug>.md, later ones <slug>-<date>.md,
     // and same-day repeats <slug>-<date>-2.md, -3, ... The shell picks the
@@ -732,14 +745,214 @@ Item {
     id: writerFile
     printErrors: false
     onSaved: {
+      var folder = root._pendingWrite ? root._pendingWrite.folder : ""
       root.saveBusy = false
       root.lastSavedPath = root._pendingWrite ? root._pendingWrite.path : writerFile.path
       root._pendingWrite = null
+      root.saveCount++
+      if (folder && folder === root.entriesFolder) root.loadEntries(root.entriesType)
     }
     onSaveFailed: function(error) {
       root.saveBusy = false
       root.saveError = "Write failed: " + error
       root._pendingWrite = null
+    }
+  }
+
+  // ---------------------------------------------------------- past entries
+  //
+  // The notes already in <vault>/Media/<Folder>/, parsed back so the menu
+  // can list them and edit one in place. One type is loaded at a time (the
+  // one the menu is showing); a personal journal is small enough that
+  // re-reading the folder on every menu open is cheap.
+  readonly property var _folders: ({ game: "Games", film: "Films", book: "Books", music: "Music", comic: "Comics" })
+
+  function folderForType(type) {
+    return root._folders[type] || ""
+  }
+
+  // Stable identity of a catalog item, written to new notes as source_id
+  // so a later search result can be matched to its notes exactly.
+  function sourceIdFor(type, item) {
+    if (!item) return ""
+    if (type === "game" && item.id) return "rawg:" + item.id
+    if (type === "film" && item.id) return "tmdb:" + item.id
+    if (type === "book" && item.key) return "openlibrary:" + item.key
+    if (type === "music" && item.id) return "musicbrainz:" + item.id
+    if (type === "comic" && item.id) return "comicvine:" + item.id
+    return ""
+  }
+
+  property var entries: []          // [{path, fileName, title, fields, review}], newest first
+  property string entriesType: ""
+  property string entriesFolder: ""
+  property bool entriesBusy: false
+  property string entriesError: ""
+  property string _entriesPendingType: ""
+
+  function loadEntries(type) {
+    var folder = root.folderForType(type)
+    if (!folder || !root.vaultPath) {
+      root.entries = []
+      root.entriesType = type || ""
+      root.entriesFolder = folder
+      return false
+    }
+    if (root.entriesBusy) {   // entriesProc is a single shared Process
+      root._entriesPendingType = type
+      return true
+    }
+    if (type !== root.entriesType) root.entries = []
+    root.entriesType = type
+    root.entriesFolder = folder
+    root.entriesBusy = true
+    root.entriesError = ""
+    // Each note is emitted as RS <path> US <contents>; the control bytes
+    // can't appear in a path or in a markdown note in practice.
+    entriesProc.command = ["sh", "-c",
+      'for f in "$1"/*.md; do [ -f "$f" ] || continue; printf "\\036%s\\037" "$f"; cat "$f"; done',
+      "sh", root.vaultPath + "/Media/" + folder]
+    entriesProc.running = true
+    return true
+  }
+
+  Process {
+    id: entriesProc
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        root.entriesBusy = false
+        var list = []
+        var chunks = String(text || "").split("\u001e")
+        for (var i = 1; i < chunks.length; i++) {
+          var sep = chunks[i].indexOf("\u001f")
+          if (sep < 0) continue
+          var path = chunks[i].slice(0, sep)
+          try {
+            var note = Frontmatter.parseNote(chunks[i].slice(sep + 1))
+            list.push({
+              path: path,
+              fileName: path.slice(path.lastIndexOf("/") + 1),
+              title: String(note.fields.title || note.heading || ""),
+              fields: note.fields,
+              review: note.review
+            })
+          } catch (e) {
+            root.entriesError = "Could not read " + path + ": " + e
+          }
+        }
+        list.sort(function(a, b) {
+          var da = String(a.fields.date_logged || ""), db = String(b.fields.date_logged || "")
+          if (da !== db) return da < db ? 1 : -1
+          // Same day: a re-log's name is the original's plus a -<date>(-N)
+          // suffix, so the longer name is the newer one.
+          if (a.fileName.length !== b.fileName.length) return b.fileName.length - a.fileName.length
+          return a.fileName < b.fileName ? 1 : -1
+        })
+        root.entries = list
+
+        if (root._entriesPendingType) {
+          var next = root._entriesPendingType
+          root._entriesPendingType = ""
+          root.loadEntries(next)
+        }
+      }
+    }
+  }
+
+  // The loaded notes that belong to one catalog item: an exact source_id
+  // match, or, for notes written before source_id existed, the filename
+  // this plugin would have given it (<slug>.md or a dated re-log of it).
+  function pastEntriesFor(type, item) {
+    if (!item || type !== root.entriesType) return []
+    var sid = root.sourceIdFor(type, item)
+    var slug = Frontmatter.slugify(item.title, type === "book" ? item.key : item.id)
+    var byName = new RegExp("^" + slug.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "(-\\d{4}-\\d{2}-\\d{2}(-\\d+)?)?\\.md$")
+    var out = []
+    for (var i = 0; i < root.entries.length; i++) {
+      var e = root.entries[i]
+      var eSid = String(e.fields.source_id || "")
+      if (eSid ? eSid === sid : byName.test(e.fileName)) out.push(e)
+    }
+    return out
+  }
+
+  // Rewrites one existing note in place with new form values. Only the keys
+  // the form owns are touched (see Frontmatter.updateNote); the note is
+  // re-read right before writing so edits made in Obsidian since the menu
+  // loaded it aren't lost.
+  // fields: same shape the writeXEntry() functions take.
+  function updateEntry(path, fields) {
+    fields = fields || {}
+    if (root.saveBusy) {
+      root.saveError = "Already saving — try again in a moment"
+      return false
+    }
+    var mediaRoot = root.vaultPath + "/Media/"
+    path = String(path || "")
+    if (!root.vaultPath || path.indexOf(mediaRoot) !== 0 || path.indexOf("/../") >= 0 || !/\.md$/.test(path)) {
+      root.saveError = "Refusing to edit a file outside " + mediaRoot
+      return false
+    }
+    var folder = path.slice(mediaRoot.length).split("/")[0]
+
+    root.saveBusy = true
+    root.saveError = ""
+    root._pendingWrite = { path: path, markdown: "", folder: folder, fields: fields }
+    editReadProc.command = ["cat", path]
+    editReadProc.running = true
+    return true
+  }
+
+  function _editChanges(type, fields) {
+    var changes = { rating: fields.rating, status: fields.status }
+    if (type === "game") {
+      changes.platform = fields.platform
+      changes.hours_played = fields.hoursPlayed
+    } else if (type === "film") {
+      changes.rewatch = fields.rewatch === true
+    } else if (type === "book") {
+      changes.format = fields.format
+    } else if (type === "music") {
+      changes.format = fields.format
+      changes.label = fields.label
+    } else if (type === "comic") {
+      changes.writer = fields.writer
+      changes.creator = fields.writer
+      changes.artist = fields.artist
+    }
+    // Backfill only: set when the menu knows them, never used to clear.
+    if (fields.cover) changes.cover = fields.cover
+    if (fields.sourceId) changes.source_id = fields.sourceId
+    return changes
+  }
+
+  Process {
+    id: editReadProc
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        var pending = root._pendingWrite
+        var current = String(text || "")
+        if (!pending) return
+        if (!current.trim()) {
+          root.saveBusy = false
+          root.saveError = "Could not read " + pending.path
+          root._pendingWrite = null
+          return
+        }
+        try {
+          var type = String(Frontmatter.parseNote(current).fields.type || "")
+          pending.markdown = Frontmatter.updateNote(current, root._editChanges(type, pending.fields), pending.fields.review)
+        } catch (e) {
+          root.saveBusy = false
+          root.saveError = "Could not update " + pending.path + ": " + e
+          root._pendingWrite = null
+          return
+        }
+        writerFile.path = pending.path
+        writerFile.setText(pending.markdown)
+      }
     }
   }
 
@@ -896,6 +1109,26 @@ Item {
         return "bad-json"
       }
       return root.writeComicEntry(fields) ? "ok" : "unhandled"
+    }
+
+    // type: game|film|book|music|comic. Async; read the result with entries().
+    function loadEntries(type: string): string {
+      return root.loadEntries(type) ? "ok" : "unhandled"
+    }
+
+    function entries(): string {
+      return JSON.stringify({ type: root.entriesType, busy: root.entriesBusy, error: root.entriesError, entries: root.entries })
+    }
+
+    // fieldsJson: same shape as the matching logX() call, plus "review".
+    function editEntry(path: string, fieldsJson: string): string {
+      var fields
+      try {
+        fields = JSON.parse(fieldsJson)
+      } catch (e) {
+        return "bad-json"
+      }
+      return root.updateEntry(path, fields) ? "ok" : "unhandled"
     }
   }
 }

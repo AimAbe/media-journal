@@ -8,7 +8,12 @@ media diary that lives in plain files you already own.
 
 Search happens against the real catalog for each media type, so a logged
 entry starts with real metadata (year, developer, director, author, artist,
-publisher, ...) — you just add your rating, review, and status.
+publisher, ...) and cover art. You just add your rating, review, and status.
+
+With the search box empty, the menu lists your recent entries. Click one to
+read it or edit it. Pick a search result you've logged before and your past
+entries for it appear above the form, with the start of each review; click
+one to edit it in place.
 
 | Type   | Source                                                          | API key |
 |--------|------------------------------------------------------------------|:-------:|
@@ -127,6 +132,8 @@ Every note has these shared fields:
 | `status` | See below |
 | `date_logged` | `YYYY-MM-DD`, the day you logged it |
 | `tags` | `media/<type>` |
+| `cover` | Cover image URL from the catalog |
+| `source_id` | The catalog's id, e.g. `rawg:1014273`. Used to match search results to your past entries |
 
 Each type adds its own fields, and each has its own status values:
 
@@ -138,7 +145,11 @@ Each type adds its own fields, and each has its own status values:
 | Music | `artist`, `album`, `format`, `label` | `listened`, `favorite` |
 | Comic | `writer`, `artist`, `publisher`, `issues`, `volume` | `reading`, `read`, `dropped`, `backlog` |
 
-Empty fields are left out of the frontmatter. For comics, `writer` and
+Empty fields are left out of the frontmatter. Editing an entry from the menu
+rewrites only rating, status, the review and the type's own fields shown in
+the form. Any other lines, including ones you added in Obsidian, are kept.
+Notes from before `cover` and `source_id` existed get them filled in the
+first time you edit them from a search result. For comics, `writer` and
 `artist` are typed in by you, because Comic Vine only lists credits per
 issue, not per volume.
 

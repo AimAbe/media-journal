@@ -11,6 +11,10 @@ import qs.Ui
 // ToggleSwitch) instead of hand-rolled key catching, since this is a form
 // the user types into rather than a keyboard-navigated grid.
 //
+// With an empty search box it lists your recent entries of the current
+// type; picking one (or a past entry shown under a selected search result)
+// opens it for editing in place instead of logging a new one.
+//
 // `service` is not wired up here — the shell's generic panel loader sets
 // it to serviceFor(<this plugin's id>) once loaded (shell.qml: "if
 // ('service' in item) item.service = shell.serviceFor(...)"), since this
@@ -34,7 +38,9 @@ Item {
 
     searchField.text = ""
     root.hasActiveSelection = false
+    root.editingEntry = null
     root.savedConfirmation = ""
+    if (root.service) root.service.loadEntries(root.mediaType)
     Qt.callLater(function() { searchField.forceActiveFocus() })
   }
 
@@ -67,7 +73,9 @@ Item {
     root.mediaType = next
     searchField.text = ""
     root.hasActiveSelection = false
+    root.editingEntry = null
     root.savedConfirmation = ""
+    if (root.service) root.service.loadEntries(next)
   }
 
   // ---------------------------------------------------- per-type dispatch
@@ -129,6 +137,109 @@ Item {
     return year
   }
 
+  // Covers come in different shapes: game art is landscape, album art is
+  // square, posters and book/comic covers are portrait.
+  function coverWidth(height) {
+    if (root.mediaType === "game") return Math.round(height * 1.5)
+    if (root.mediaType === "music") return height
+    return Math.round(height * 0.67)
+  }
+
+  // ------------------------------------------------------- past entries
+  property bool showingRecent: searchField.text.trim() === ""
+
+  function recentEntries() {
+    if (!root.service || root.service.entriesType !== root.mediaType) return []
+    return root.service.entries.slice(0, 25)
+  }
+
+  function pastEntries() {
+    if (!root.service || root.editingEntry) return []
+    return root.service.pastEntriesFor(root.mediaType, root.selected())
+  }
+
+  function entrySubtitle(entry) {
+    var f = entry.fields || {}
+    var parts = []
+    if (Number(f.rating) > 0) parts.push("★ " + Number(f.rating).toFixed(1))
+    if (f.status) parts.push(String(f.status))
+    if (f.date_logged) parts.push(String(f.date_logged))
+    return parts.join(" · ")
+  }
+
+  // One list serves both the recent entries and the search results.
+  function listModel() {
+    return root.showingRecent ? root.recentEntries() : root.results()
+  }
+
+  function rowTitle(item) {
+    return item ? String(item.title || "") : ""
+  }
+
+  function rowSubtitle(item) {
+    if (!item) return ""
+    if (root.showingRecent) return root.entrySubtitle(item)
+    var sub = root.resultSubtitle(item)
+    var logged = root.service ? root.service.pastEntriesFor(root.mediaType, item).length : 0
+    if (logged) sub += " · logged" + (logged > 1 ? " ×" + logged : "")
+    return sub
+  }
+
+  function rowCover(item) {
+    if (!item) return ""
+    return root.showingRecent ? String((item.fields && item.fields.cover) || "") : String(item.coverUrl || "")
+  }
+
+  function activateRow(item) {
+    if (root.showingRecent) root.openEntry(item, false)
+    else root.selectResult(item)
+  }
+
+  // null while logging something new; the entry being edited otherwise.
+  property var editingEntry: null
+  // Opened from a selected search result's "Logged before" list: Back
+  // returns to that result's new-log form rather than to search.
+  property bool editReturnsToForm: false
+
+  function openEntry(entry, fromForm) {
+    if (!entry) return
+    root.editingEntry = entry
+    root.editReturnsToForm = fromForm === true
+    root.hasActiveSelection = true
+    root.savedConfirmation = ""
+    root.prefillFromEntry(entry)
+  }
+
+  function prefillFromEntry(entry) {
+    var f = entry.fields || {}
+    root.ratingValue = Math.round((Number(f.rating) || 0) * 2) / 2
+    root.statusValue = f.status ? String(f.status) : root.defaultStatus()
+    root.rewatchValue = f.rewatch === true
+    reviewField.text = entry.review || ""
+    hoursPlayedField.field.value = Number(f.hours_played) || 0
+    platformField.text = f.platform ? String(f.platform) : ""
+    formatField.text = f.format ? String(f.format) : ""
+    labelField.text = f.label ? String(f.label) : ""
+    writerField.text = f.writer ? String(f.writer) : ""
+    artistField.text = f.artist ? String(f.artist) : ""
+  }
+
+  // What the form header shows, for either mode.
+  function headerInfo() {
+    if (root.editingEntry) {
+      var f = root.editingEntry.fields || {}
+      return { title: root.editingEntry.title, year: f.year || "", creator: f.creator || "", cover: f.cover || "" }
+    }
+    var s = root.selected()
+    if (!s) return { title: "", year: "", creator: "", cover: "" }
+    return {
+      title: s.title,
+      year: s.year || "",
+      creator: s.developer || s.director || s.author || s.artist || s.publisher || "",
+      cover: s.coverUrl || ""
+    }
+  }
+
   function runSearch(query) {
     if (!root.service) return
     if (root.mediaType === "game") root.service.searchGames(query)
@@ -153,8 +264,14 @@ Item {
   }
 
   function backToSearch() {
-    root.hasActiveSelection = false
     root.savedConfirmation = ""
+    if (root.editingEntry && root.editReturnsToForm) {
+      root.editingEntry = null
+      root.resetFormFields()
+      return
+    }
+    root.editingEntry = null
+    root.hasActiveSelection = false
   }
 
   function saveSelected(fields) {
@@ -183,6 +300,14 @@ Item {
     if (root.mediaType === "music") return ["listened", "favorite"]
     if (root.mediaType === "comic") return ["reading", "read", "dropped", "backlog"]
     return ["done"]
+  }
+
+  // An edited note may carry a status typed by hand in Obsidian; keep it
+  // selectable instead of silently swapping it for a default.
+  function statusChoices() {
+    var options = root.statusOptions()
+    if (root.statusValue && options.indexOf(root.statusValue) < 0) options = options.concat([root.statusValue])
+    return options
   }
 
   // ------------------------------------------------------------ form state
@@ -228,15 +353,27 @@ Item {
 
   function submitSave() {
     var fields = root.buildFields()
-    root.saveSelected(fields)   // async; onLastSavedPathChanged below confirms it
+    // async; onSaveCountChanged below confirms it
+    if (root.editingEntry) {
+      // Opened from a search result: fill in the cover and source_id that
+      // notes written before those fields existed are missing.
+      var f = root.editingEntry.fields || {}
+      var hit = root.editReturnsToForm ? root.selected() : null
+      if (hit && !f.cover && hit.coverUrl) fields.cover = hit.coverUrl
+      if (hit && !f.source_id) fields.sourceId = root.service.sourceIdFor(root.mediaType, hit)
+      root.service.updateEntry(root.editingEntry.path, fields)
+    }
+    else root.saveSelected(fields)
   }
 
   Connections {
     target: root.service
-    function onLastSavedPathChanged() {
+    function onSaveCountChanged() {
       if (!root.hasActiveSelection) return
+      var wasEdit = root.editingEntry !== null
       root.hasActiveSelection = false
-      root.savedConfirmation = "Saved " + (root.service ? root.service.lastSavedPath : "")
+      root.editingEntry = null
+      root.savedConfirmation = (wasEdit ? "Updated " : "Saved ") + (root.service ? root.service.lastSavedPath : "")
       confirmationTimer.restart()
     }
   }
@@ -251,6 +388,28 @@ Item {
     id: searchDebounce
     interval: 400
     onTriggered: root.runSearch(searchField.text)
+  }
+
+  // A cover image, or an empty tinted slot while it loads or if there's
+  // none. Inline components don't see this file's ids, hence `tint`.
+  component Cover: Rectangle {
+    id: cover
+    property string url: ""
+    property color tint: "white"
+    radius: Style.spacing.xxs
+    color: Qt.rgba(tint.r, tint.g, tint.b, 0.08)
+    clip: true
+
+    Image {
+      anchors.fill: parent
+      source: cover.url
+      asynchronous: true
+      cache: true
+      fillMode: Image.PreserveAspectCrop
+      sourceSize.width: cover.width * 2
+      sourceSize.height: cover.height * 2
+      visible: status === Image.Ready
+    }
   }
 
   // ----------------------------------------------------------- appearance
@@ -376,18 +535,28 @@ Item {
               font.pixelSize: Style.font.bodySmall
             }
 
+            Text {
+              textFormat: Text.PlainText
+              width: parent.width
+              visible: root.showingRecent
+              text: root.recentEntries().length ? "Recent" : "Nothing logged yet. Search to log your first " + root.mediaType + "."
+              color: Qt.darker(root.foreground, 1.4)
+              font.family: Style.font.family
+              font.pixelSize: Style.font.bodySmall
+            }
+
             Column {
               width: parent.width
               spacing: Style.spacing.xxs
 
               Repeater {
-                model: root.results()
+                model: root.listModel()
 
                 Rectangle {
                   id: resultRow
                   required property var modelData
                   width: content.width
-                  height: resultCol.implicitHeight + Style.spacing.controlPaddingY * 2
+                  height: Math.max(rowCover.height, resultCol.implicitHeight) + Style.spacing.controlPaddingY * 2
                   radius: root.cornerRadius
                   color: rowHover.hovered ? root.selectedBackground : "transparent"
 
@@ -395,22 +564,33 @@ Item {
                   MouseArea {
                     anchors.fill: parent
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: root.selectResult(resultRow.modelData)
+                    onClicked: root.activateRow(resultRow.modelData)
+                  }
+
+                  Cover {
+                    id: rowCover
+                    anchors.left: parent.left
+                    anchors.verticalCenter: parent.verticalCenter
+                    anchors.leftMargin: Style.spacing.controlPaddingX
+                    height: Style.space(44)
+                    width: root.coverWidth(height)
+                    url: root.rowCover(resultRow.modelData)
+                    tint: root.foreground
                   }
 
                   Column {
                     id: resultCol
-                    anchors.left: parent.left
+                    anchors.left: rowCover.right
                     anchors.right: parent.right
                     anchors.verticalCenter: parent.verticalCenter
-                    anchors.leftMargin: Style.spacing.controlPaddingX
+                    anchors.leftMargin: Style.spacing.md
                     anchors.rightMargin: Style.spacing.controlPaddingX
                     spacing: Style.spacing.xxs
 
                     Text {
                       textFormat: Text.PlainText
                       width: parent.width
-                      text: resultRow.modelData.title
+                      text: root.rowTitle(resultRow.modelData)
                       color: root.foreground
                       elide: Text.ElideRight
                       font.family: Style.font.family
@@ -419,7 +599,7 @@ Item {
                     Text {
                       textFormat: Text.PlainText
                       width: parent.width
-                      text: root.resultSubtitle(resultRow.modelData)
+                      text: root.rowSubtitle(resultRow.modelData)
                       color: root.foreground
                       opacity: 0.65
                       elide: Text.ElideRight
@@ -443,6 +623,7 @@ Item {
               spacing: Style.spacing.md
 
               Button {
+                id: backButton
                 text: "‹ Back"
                 focusable: true
                 onClicked: root.backToSearch()
@@ -451,16 +632,127 @@ Item {
               Text {
                 textFormat: Text.PlainText
                 anchors.verticalCenter: parent.verticalCenter
-                width: parent.width - Style.space(80)
+                width: parent.width - backButton.width - Style.spacing.md
                 elide: Text.ElideRight
-                text: {
-                  var s = root.selected()
-                  return s ? s.title + (s.year ? " (" + s.year + ")" : "") : ""
-                }
+                visible: root.editingEntry !== null
+                text: root.editingEntry ? "Editing your entry from " + (root.editingEntry.fields.date_logged || "?") : ""
                 color: root.foreground
+                opacity: 0.7
                 font.family: Style.font.family
-                font.pixelSize: Style.font.title
-                font.bold: true
+                font.pixelSize: Style.font.bodySmall
+              }
+            }
+
+            Row {
+              width: parent.width
+              spacing: Style.spacing.md
+
+              Cover {
+                id: headerCover
+                height: Style.space(120)
+                width: root.coverWidth(height)
+                url: root.headerInfo().cover
+                tint: root.foreground
+              }
+
+              Column {
+                width: parent.width - headerCover.width - Style.spacing.md
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: Style.spacing.xxs
+
+                Text {
+                  textFormat: Text.PlainText
+                  width: parent.width
+                  wrapMode: Text.WordWrap
+                  maximumLineCount: 3
+                  elide: Text.ElideRight
+                  text: root.headerInfo().title
+                  color: root.foreground
+                  font.family: Style.font.family
+                  font.pixelSize: Style.font.title
+                  font.bold: true
+                }
+                Text {
+                  textFormat: Text.PlainText
+                  width: parent.width
+                  elide: Text.ElideRight
+                  text: {
+                    var h = root.headerInfo()
+                    return [h.year, h.creator].filter(function(x) { return x !== "" && x !== null }).join(" · ")
+                  }
+                  color: root.foreground
+                  opacity: 0.65
+                  font.family: Style.font.family
+                  font.pixelSize: Style.font.bodySmall
+                }
+              }
+            }
+
+            // Past entries for the selected search result; click one to
+            // edit it instead of logging a new entry.
+            Column {
+              width: parent.width
+              spacing: Style.spacing.xxs
+              visible: root.pastEntries().length > 0
+
+              Text {
+                textFormat: Text.PlainText
+                text: "Logged before · click to view or edit"
+                color: Qt.darker(root.foreground, 1.4)
+                font.family: Style.font.family
+                font.pixelSize: Style.font.bodySmall
+              }
+
+              Repeater {
+                model: root.pastEntries()
+
+                Rectangle {
+                  id: pastRow
+                  required property var modelData
+                  width: content.width
+                  height: pastCol.implicitHeight + Style.spacing.controlPaddingY * 2
+                  radius: root.cornerRadius
+                  color: pastHover.hovered ? root.selectedBackground : Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.04)
+
+                  HoverHandler { id: pastHover }
+                  MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: root.openEntry(pastRow.modelData, true)
+                  }
+
+                  Column {
+                    id: pastCol
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    anchors.leftMargin: Style.spacing.controlPaddingX
+                    anchors.rightMargin: Style.spacing.controlPaddingX
+                    spacing: Style.spacing.xxs
+
+                    Text {
+                      textFormat: Text.PlainText
+                      width: parent.width
+                      text: root.entrySubtitle(pastRow.modelData)
+                      color: root.foreground
+                      font.family: Style.font.family
+                      font.pixelSize: Style.font.bodySmall
+                    }
+                    Text {
+                      textFormat: Text.PlainText
+                      width: parent.width
+                      visible: text !== ""
+                      text: pastRow.modelData.review || ""
+                      wrapMode: Text.WordWrap
+                      maximumLineCount: 2
+                      elide: Text.ElideRight
+                      color: root.foreground
+                      opacity: 0.65
+                      font.family: Style.font.family
+                      font.pixelSize: Style.font.caption
+                    }
+                  }
+                }
               }
             }
 
@@ -501,17 +793,51 @@ Item {
               }
             }
 
-            TextField {
-              id: reviewField
+            // Multi-line so past reviews can be read and extended; qs.Ui has
+            // no text-area control, so this is a bordered TextEdit.
+            Rectangle {
               width: parent.width
-              placeholderText: "Review (goes under the heading in the note body)"
+              height: Math.max(Style.space(96), reviewField.contentHeight + Style.spacing.inputPaddingY * 2)
+              radius: root.cornerRadius
+              color: "transparent"
+              border.width: Math.max(1, Style.space(1))
+              border.color: reviewField.activeFocus ? Color.accent : root.border
+
+              TextEdit {
+                id: reviewField
+                anchors.fill: parent
+                anchors.leftMargin: Style.spacing.controlPaddingX
+                anchors.rightMargin: Style.spacing.controlPaddingX
+                anchors.topMargin: Style.spacing.inputPaddingY
+                anchors.bottomMargin: Style.spacing.inputPaddingY
+                textFormat: TextEdit.PlainText
+                wrapMode: TextEdit.Wrap
+                selectByMouse: true
+                activeFocusOnTab: true
+                color: root.foreground
+                selectionColor: root.selectedBackground
+                selectedTextColor: root.selectedText
+                font.family: Style.font.family
+                font.pixelSize: Style.font.body
+              }
+
+              Text {
+                textFormat: Text.PlainText
+                anchors.fill: reviewField
+                visible: reviewField.text === "" && !reviewField.activeFocus
+                text: "Review (Enter for a new line)"
+                color: root.foreground
+                opacity: 0.45
+                font.family: Style.font.family
+                font.pixelSize: Style.font.body
+              }
             }
 
             Dropdown {
               width: parent.width
               label: "Status"
               value: root.statusValue
-              options: root.statusOptions()
+              options: root.statusChoices()
               onChanged: function(v) { root.statusValue = v }
             }
 
@@ -599,7 +925,7 @@ Item {
               spacing: Style.spacing.md
 
               Button {
-                text: root.service && root.service.saveBusy ? "Saving…" : "Save"
+                text: root.service && root.service.saveBusy ? "Saving…" : (root.editingEntry ? "Save changes" : "Save")
                 bordered: true
                 focusable: true
                 enabled: !(root.service && root.service.saveBusy)
@@ -607,17 +933,20 @@ Item {
               }
             }
 
-            Text {
-              textFormat: Text.PlainText
-              width: parent.width
-              wrapMode: Text.WordWrap
-              visible: root.savedConfirmation !== "" || (root.service && root.service.saveError !== "")
-              text: (root.service && root.service.saveError) || root.savedConfirmation
-              color: root.foreground
-              opacity: 0.8
-              font.family: Style.font.family
-              font.pixelSize: Style.font.bodySmall
-            }
+          }
+
+          // Outside the form: a successful save closes the form, and the
+          // confirmation should still be visible after it does.
+          Text {
+            textFormat: Text.PlainText
+            width: parent.width
+            wrapMode: Text.WordWrap
+            visible: root.savedConfirmation !== "" || (root.service && root.service.saveError !== "")
+            text: (root.service && root.service.saveError) || root.savedConfirmation
+            color: root.foreground
+            opacity: 0.8
+            font.family: Style.font.family
+            font.pixelSize: Style.font.bodySmall
           }
         }
       }
