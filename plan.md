@@ -32,11 +32,10 @@ RAWG, unified into one personal media diary.
 - [x] Add entryPoints: service / menu / bar-widget QML files.
 - [x] `omarchy plugin validate ./` until it passes.
 - [x] `omarchy plugin add` (or symlink) + enable; confirm it loads.
-      → symlinked `~/.config/omarchy/plugins/aimabe.mediajournal` to this repo.
-      **Gotcha:** a symlinked plugin dir breaks the shell's inotify-based
-      auto-reload (it doesn't traverse symlinks) — `omarchy-shell shell
-      rescanPlugins` after every edit, `omarchy-restart-shell` after editing
-      any `lib/*.js` file (plain JS imports don't hot-reload even on rescan).
+      → installed as a git checkout of this repo
+      (`omarchy plugin add ~/Projects/media-journal --enable`). Symlinked
+      plugin dirs have been rejected since Omarchy ~2026-09-15. Dev loop: commit here,
+      then `omarchy plugin update aimabe.mediajournal`, then `omarchy-restart-shell`.
 
 ### manifest.json (starting point)
 {
@@ -72,7 +71,7 @@ Type-specific fields:
 
 Vault layout:
   Vault/Media/{Films,Books,Games,Comics,Music}/<slug>.md
-  Vault/Media Journal.md   (Dataview dashboard)
+  Vault/Media/Media Journal.md   (Dataview dashboard)
 
 ## Phase 3 — Service Layer (Service.qml)
 - [x] Config: vault path, API keys (read from a config file, NOT hardcoded).
@@ -116,11 +115,12 @@ responses already carry what a log entry needs.)
 - [x] Dataview: "best of year" (rating >= 4.5, dynamic current year).
 - [x] Per-type views, plus an all-time stats table (count + avg rating by
       type) not originally in the plan.
-      → written to `<vaultPath>/Media Journal.md`. **Not yet verified
-      rendering**: the vault has no `.obsidian/` folder yet, meaning it's
-      never been opened in Obsidian, so the Dataview community plugin isn't
-      installed. Open the vault, install + enable Dataview, confirm the
-      dashboard actually renders.
+      → template in this repo (`Media Journal.md`); the live copy sits at
+      `<vaultPath>/Media/Media Journal.md`. 2026-09-24 fixes:
+      best-of-year now filters on `date_logged.year` (it was using the
+      release `year`), and the stats average skips unrated (rating 0) entries.
+- [x] Verify rendering: Dataview installed; confirmed working by the user with a
+      real logged game (2026-09-24).
 
 ## Phase 7 — Polish & Share
 - [x] Handle API failures / no results gracefully. → 36 distinct error

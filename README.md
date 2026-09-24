@@ -107,7 +107,7 @@ list per type.
 
 ## Dashboard
 
-Copy `Media Journal.md` from this repo into your vault root for a
+Copy `Media Journal.md` from this repo into your vault's `Media/` folder for a
 [Dataview](https://blacksmithgu.github.io/obsidian-dataview/) dashboard —
 this month, best of the year, in-progress, per-type tables, and an all-time
 stats summary. Requires the Dataview community plugin installed and

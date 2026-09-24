@@ -16,9 +16,9 @@ SORT date_logged DESC
 ## Best of the year
 
 ```dataview
-TABLE title, type, creator, rating
+TABLE title, type, creator, year AS "Released", rating
 FROM "Media"
-WHERE year = date(today).year AND rating >= 4.5
+WHERE date_logged.year = date(today).year AND rating >= 4.5
 SORT rating DESC
 ```
 
@@ -76,8 +76,9 @@ SORT date_logged DESC
 ## All-time stats
 
 ```dataview
-TABLE length(rows) AS "Count", round(average(rows.rating), 2) AS "Avg rating"
+TABLE length(rows) AS "Count", round(average(filter(rows.rating, (r) => r > 0)), 2) AS "Avg rating"
 FROM "Media"
+WHERE type
 GROUP BY type
 SORT length(rows) DESC
 ```
