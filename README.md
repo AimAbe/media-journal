@@ -20,8 +20,8 @@ publisher, ...) — you just add your rating, review, and status.
 
 ## Requirements
 
-- Omarchy / `omarchy-shell` (Quickshell) — this is a shell plugin, not a
-  standalone app.
+- Omarchy 4 (Quattro) / `omarchy-shell` (Quickshell). This is a shell plugin,
+  not a standalone app. Tested on Omarchy 4.0.4.
 - `curl` — every search shells out to it directly; almost certainly already
   on your system.
 - [Obsidian](https://obsidian.md) with the
@@ -35,9 +35,10 @@ publisher, ...) — you just add your rating, review, and status.
 omarchy plugin add https://github.com/AimAbe/media-journal.git --enable --yes
 ```
 
-Or clone by hand into `~/.config/omarchy/plugins/aimabe.mediajournal/`
-and run `omarchy-shell shell rescanPlugins`. See the
-[plugin docs](https://github.com/basecamp/omarchy/blob/master/shell/README.md)
+Or clone by hand into `~/.config/omarchy/plugins/aimabe.mediajournal/`, then
+run `omarchy plugin enable aimabe.mediajournal`. It has to be a real folder:
+Omarchy rejects plugin folders that are symlinks. See the
+[plugin docs](https://github.com/omacom/omarchy/blob/master/shell/README.md)
 for the general install/enable flow.
 
 A boxed-pencil icon appears in the bar (default: right section — move it with
@@ -48,6 +49,16 @@ open the menu, or bind a key:
 # ~/.config/hypr/bindings.conf
 bindd = SUPER, M, Log media, exec, omarchy-shell shell toggle aimabe.mediajournal '{}'
 ```
+
+## Update
+
+```bash
+omarchy plugin update aimabe.mediajournal
+omarchy-restart-shell
+```
+
+A full shell restart is needed because the plugin's `lib/*.js` files aren't
+hot-reloaded.
 
 ## Uninstall
 
@@ -100,18 +111,43 @@ plaintext API keys) — if you ever hand-edit it, that's expected, not a bug.
   Comics/<slug>.md
 ```
 
-Each note is YAML frontmatter (shared fields — `type`, `title`, `creator`,
-`year`, `rating`, `status`, `date_logged`, `tags` — plus type-specific ones)
-followed by your review as the note body. See `plan.md` for the exact field
-list per type.
+Each note is YAML frontmatter followed by your review as the note body. Files
+are named after a slug of the title, and logging the same title again
+overwrites its note.
+
+Every note has these shared fields:
+
+| Field | Meaning |
+|-------|---------|
+| `type` | `game`, `film`, `book`, `music` or `comic` |
+| `title`, `creator`, `year` | From the catalog. `creator` is the developer, director, author, artist or writer. `year` is the release year |
+| `rating` | 0–5 in half steps. `0` means unrated |
+| `status` | See below |
+| `date_logged` | `YYYY-MM-DD`, the day you logged it |
+| `tags` | `media/<type>` |
+
+Each type adds its own fields, and each has its own status values:
+
+| Type | Extra fields | Status values |
+|------|--------------|---------------|
+| Game | `platform`, `hours_played`, `developer` | `playing`, `completed`, `dropped`, `backlog` |
+| Film | `director`, `runtime`, `rewatch` | `watched`, `rewatching`, `dropped` |
+| Book | `author`, `pages`, `format` | `reading`, `read`, `dnf`, `backlog` |
+| Music | `artist`, `album`, `format`, `label` | `listened`, `favorite` |
+| Comic | `writer`, `artist`, `publisher`, `issues`, `volume` | `reading`, `read`, `dropped`, `backlog` |
+
+Empty fields are left out of the frontmatter. For comics, `writer` and
+`artist` are typed in by you, because Comic Vine only lists credits per
+issue, not per volume.
 
 ## Dashboard
 
 Copy `Media Journal.md` from this repo into your vault's `Media/` folder for a
 [Dataview](https://blacksmithgu.github.io/obsidian-dataview/) dashboard —
-this month, best of the year, in-progress, per-type tables, and an all-time
-stats summary. Requires the Dataview community plugin installed and
-enabled in Obsidian.
+this month, best of the year (by date logged), in-progress, per-type tables,
+and an all-time stats summary (average ratings skip unrated entries).
+Requires the Dataview community plugin installed and enabled in Obsidian.
+Open it in Reading view or Live Preview. Source mode shows the raw queries.
 
 ## Architecture, for anyone extending this
 
@@ -132,6 +168,11 @@ Adding a media type means one `lib/<Api>.js` normalizer, a search (+
 details, if the search endpoint doesn't carry enough) `Process` in
 `Service.qml`, and a `writeXEntry()` that builds the frontmatter object and
 calls `saveEntry()`.
+
+To hack on it, install your local clone as a git checkout, not a symlink:
+`omarchy plugin add ~/path/to/media-journal --enable`. The installed copy only
+sees committed code. After each commit, run `omarchy plugin update
+aimabe.mediajournal` and then `omarchy-restart-shell`.
 
 ## License
 
